@@ -1,12 +1,12 @@
 # simulator-llm-pilot
 
-AI-driven iOS end-to-end test runner. Executes test cases written as plain-language markdown files against a WordPress or Jetpack iOS app in a simulator, using an LLM to navigate the UI through a sandboxed set of tools.
+`simulator-llm-pilot` runs natural-language iOS end-to-end tests against a WordPress or Jetpack app in the iOS Simulator. Tests are written as Markdown, and the model can only interact with the app through a fixed set of sandboxed tools backed by WebDriverAgent, `xcrun simctl`, and the WordPress REST API.
 
 ## Why
 
-Traditional XCUITest-based UI tests are brittle and expensive to maintain. When they break, they tend to stay broken for weeks while PRs keep merging against a red CI. The AI-driven approach replaces rigid, coordinate-coupled test code with natural-language test cases that an LLM interprets and executes at runtime.
+Traditional XCUITest-style UI tests are often brittle and expensive to maintain. When the UI changes, the test code usually needs to change with it. This project moves the intent of the test into Markdown and lets the model adapt at runtime using the current accessibility tree.
 
-The key problem with running an LLM CLI (like Claude Code) directly in CI is that it requires broad permissions — arbitrary shell commands, network access, filesystem writes — which is a security and reliability risk. **simulator-llm-pilot solves this by acting as an intermediary**: it owns all I/O and exposes only a fixed set of operations to the LLM. The model can think, but it can only act through the narrow interface the tool defines.
+The other problem is CI safety. A general-purpose LLM CLI typically wants broad permissions: arbitrary shell commands, network access, and filesystem writes. `simulator-llm-pilot` sits in the middle and owns those side effects itself. The model can decide what to do next, but it can only act through the narrow interface this tool exposes.
 
 ## How it works
 
@@ -29,19 +29,19 @@ The key problem with running an LLM CLI (like Claude Code) directly in CI is tha
 └──────────────────────────────────────────────────┘
 ```
 
-1. **simulator-llm-pilot** reads a markdown test file (e.g., "Create and Publish a Blank Page").
-2. It sends the test steps to the **Claude API** along with a fixed set of tool definitions.
-3. The LLM responds with tool calls (`get_accessibility_tree`, `tap`, `type_text`, etc.).
-4. **simulator-llm-pilot** executes each tool call against the simulator via **WebDriverAgent** and `xcrun simctl`.
-5. Results are returned to the LLM, which decides the next action.
-6. This loops until the LLM calls `complete_test` with a pass/fail verdict.
-7. The runner enforces declared test sections: a model-declared pass is downgraded to fail if required verification or cleanup REST work did not run successfully.
+1. `simulator-llm-pilot` reads a Markdown test file or a directory of `.md` files.
+2. It sends the test content and the tool definitions to the Claude API.
+3. The model responds with tool calls such as `get_accessibility_tree`, `tap`, and `type_text`.
+4. The runner executes those calls through WebDriverAgent, `xcrun simctl`, or the WordPress REST API.
+5. Tool results go back to the model, which chooses the next action.
+6. The loop continues until the model calls `complete_test` with a pass or fail verdict.
+7. The runner still enforces the declared test contract: if verification or cleanup sections exist and the required REST work does not complete successfully, the test is marked failed.
 
-The LLM **cannot** execute shell commands, write scripts, access the filesystem, or make arbitrary network requests. Every action goes through the tool executor.
+The model cannot execute shell commands, write files, or make arbitrary network requests. Every action goes through the tool executor.
 
 ## Available tools
 
-The LLM has access to exactly these operations:
+The model has access to exactly these operations:
 
 | Tool | Description |
 |------|-------------|
@@ -59,7 +59,9 @@ The LLM has access to exactly these operations:
 
 ## Test format
 
-Tests are markdown files with natural-language sections. Example:
+Tests are Markdown files with natural-language sections. The parser uses the top-level title and any `##` sections it finds. Verification and cleanup are optional, but if you declare them, the runner expects the model to execute matching REST API calls successfully.
+
+Example:
 
 ```markdown
 # Publish a Text Post
@@ -98,17 +100,21 @@ Tests are markdown files with natural-language sections. Example:
 
 ## Installation
 
+Build and install the gem:
+
 ```bash
 cd simulator-llm-pilot
 gem build simulator-llm-pilot.gemspec
-gem install simulator-llm-pilot-0.1.0.gem
+gem install ./simulator-llm-pilot-<version>.gem
 ```
 
-Or run directly from the repo:
+Or run it directly from the repo:
 
 ```bash
 ruby bin/simulator-llm-pilot run ...
 ```
+
+Runtime dependencies are Ruby stdlib only.
 
 ## Usage
 
@@ -132,6 +138,8 @@ simulator-llm-pilot run path/to/ui-tests/ \
   --app-password "xxxx xxxx xxxx xxxx"
 ```
 
+When you pass a directory, the runner executes every `.md` file in that directory.
+
 ### All options
 
 ```
@@ -147,8 +155,12 @@ simulator-llm-pilot run path/to/ui-tests/ \
 --model MODEL            Anthropic model (default: claude-sonnet-4-20250514)
 --max-turns N            Max tool call rounds per test (default: 100)
 --timeout SECS           Timeout per test in seconds (default: 600)
---debug                  Enable debug logging (shows LLM reasoning and tool details)
+--max-context-turns N    Compress accessibility trees older than N turns (default: 20)
+--rest-api-prefix PATH   Allowed REST API path prefix (default: /wp-json/)
+--debug                  Enable debug logging
 ```
+
+Run `simulator-llm-pilot run --help` for the CLI help text.
 
 ### Environment variables
 
@@ -176,7 +188,7 @@ xcodebuild build-for-testing \
   CODE_SIGNING_ALLOWED=NO
 ```
 
-simulator-llm-pilot looks for WDA at `.build/WebDriverAgent/WebDriverAgent.xcodeproj` relative to the working directory. Use `--wda-project` to override.
+By default, the runner looks for WDA at `.build/WebDriverAgent/WebDriverAgent.xcodeproj` relative to the working directory. Use `--wda-project` to override that path.
 
 ## Output
 
@@ -189,7 +201,7 @@ results/2026-03-23-1430/
     └── create-blank-page-failure-1.png
 ```
 
-The process exits with code 0 if all tests pass, 1 if any fail.
+The process exits with status code `0` if all tests pass, or `1` if any test fails or hits an infrastructure error.
 
 ## Development
 
@@ -204,29 +216,8 @@ bundle exec rubocop     # lint only
 
 1. Add entries under `## Trunk` in `CHANGELOG.md` (subsections: Breaking Changes, New Features, Bug Fixes, Internal Changes).
 2. Run `bundle exec rake new_release` — it bumps the version, updates the changelog, pushes a `release/<version>` branch, and opens a PR.
-3. Merge the PR into `main`.
-4. Create a GitHub Release with a tag matching the version (e.g. `0.2.0`). The tag triggers Buildkite to publish the gem to RubyGems.
-
-## Project structure
-
-```
-lib/simulator_llm_pilot/
-├── agent.rb             # Core loop: LLM <-> tool executor
-├── cli.rb               # Command-line interface
-├── config.rb            # Configuration and validation
-├── errors.rb            # InfraError and LLMError exception classes
-├── llm_client.rb        # Anthropic Messages API (stdlib net/http)
-├── logger.rb            # Structured timestamped logging
-├── runner.rb            # Orchestration: WDA lifecycle, test loop, results
-├── simulator.rb         # xcrun simctl wrapper
-├── test_parser.rb       # Markdown test discovery and parsing
-├── tool_definitions.rb  # The 11 sandboxed tools (the security boundary)
-├── tool_executor.rb     # Executes tool calls against WDA/simctl/REST
-├── wda_client.rb        # WebDriverAgent HTTP client
-└── wda_lifecycle.rb     # WDA process start/stop
-```
-
-Zero external dependencies. Uses only Ruby stdlib.
+3. Merge the release PR.
+4. Create a GitHub Release with a tag matching the version (for example, `0.2.0`). The tag triggers Buildkite to publish the gem to RubyGems.
 
 ## CI usage
 
@@ -246,10 +237,8 @@ simulator-llm-pilot run Tests/AgentTests/ui-tests/ \
   --results-dir "$BUILDKITE_ARTIFACT_DIR/e2e-results"
 ```
 
-The key advantage over running Claude Code directly in CI: **no arbitrary code execution**. The LLM can only interact with the simulator through the predefined tool set. No `curl`, no `jq`, no shell scripts.
+Compared with running a general-purpose coding agent directly in CI, the main benefit here is the restricted execution model: the model only interacts with the simulator through the predefined tool set.
 
 ## License
 
-<a href="https://github.com/Automattic/simulator-llm-pilot/blob/trunk/LICENSE">
-    <img alt="License" src="https://img.shields.io/github/license/Automattic/simulator-llm-pilot">
-</a>
+MPL-2.0. See [LICENSE](LICENSE).
