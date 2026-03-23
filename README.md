@@ -14,16 +14,16 @@ The key problem with running an LLM CLI (like Claude Code) directly in CI is tha
 ┌──────────────────────────────────────────────────┐
 │  sim_pilot                                       │
 │                                                  │
-│  ┌──────────┐      ┌───────────────────────┐     │
-│  │  Claude   │◄────►│  Tool Executor        │     │
-│  │  API      │      │  (sandboxed actions)  │     │
-│  │  (Sonnet) │      │                       │     │
-│  └──────────┘      │  ┌─────────────────┐  │     │
-│                     │  │ WDA HTTP Client │  │     │
-│  ┌──────────┐      │  │ simctl wrapper  │  │     │
-│  │ Markdown  │      │  │ WP REST API     │  │     │
-│  │ test file │      │  └─────────────────┘  │     │
-│  └──────────┘      └───────────────────────┘     │
+│  ┌───────────┐      ┌───────────────────────┐    │
+│  │  Claude   │◄────►│  Tool Executor        │    │
+│  │  API      │      │  (sandboxed actions)  │    │
+│  │  (Sonnet) │      │                       │    │
+│  └───────────┘      │  ┌─────────────────┐  │    │
+│                     │  │ WDA HTTP Client │  │    │
+│  ┌───────────┐      │  │ simctl wrapper  │  │    │
+│  │ Markdown  │      │  │ WP REST API     │  │    │
+│  │ test file │      │  └─────────────────┘  │    │
+│  └───────────┘      └───────────────────────┘    │
 │                                                  │
 │  iOS Simulator (booted, app installed)           │
 └──────────────────────────────────────────────────┘
