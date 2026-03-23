@@ -116,7 +116,7 @@ module SimPilot
         end
       end
 
-      parser.order!(@argv)
+      parser.permute!(@argv)
       @test_path = @argv.shift
 
       unless @test_path

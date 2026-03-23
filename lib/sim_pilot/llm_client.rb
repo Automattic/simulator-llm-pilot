@@ -4,6 +4,16 @@ module SimPilot
   # Minimal Anthropic Messages API client with tool use support.
   # Uses only net/http from stdlib — no external dependencies.
   class LLMClient
+    ERROR_TYPES = [
+      Errno::ECONNREFUSED,
+      Errno::ECONNRESET,
+      Errno::ETIMEDOUT,
+      Net::OpenTimeout,
+      Net::ReadTimeout,
+      SocketError,
+      EOFError
+    ].freeze
+
     API_URL = "https://api.anthropic.com/v1/messages"
     API_VERSION = "2023-06-01"
 
@@ -18,6 +28,7 @@ module SimPilot
       body = {
         model: @model,
         max_tokens: max_tokens,
+        temperature: 0,
         system: system,
         tools: tools,
         messages: messages
@@ -41,7 +52,7 @@ module SimPilot
         rescue JSON::ParserError
           response.body
         end
-        raise "Anthropic API error (HTTP #{response.code}): #{error_body}"
+        raise LLMError, "Anthropic API error (HTTP #{response.code}): #{error_body}"
       end
 
       parsed = JSON.parse(response.body)
@@ -49,6 +60,10 @@ module SimPilot
       @logger.debug "LLM: #{usage["input_tokens"]}in/#{usage["output_tokens"]}out, " \
                     "stop=#{parsed["stop_reason"]}"
       parsed
+    rescue *ERROR_TYPES => e
+      raise LLMError, "Anthropic API request failed: #{e.message}"
+    rescue JSON::ParserError => e
+      raise LLMError, "Anthropic API returned invalid JSON: #{e.message}"
     end
   end
 end

@@ -25,7 +25,7 @@ module SimPilot
       args.each { |key, value| cmd.push("-#{key}", value.to_s) }
 
       output, err, status = Open3.capture3(*cmd)
-      raise "Failed to launch #{bundle_id}: #{err}" unless status.success?
+      raise InfraError, "Failed to launch #{bundle_id}: #{err}" unless status.success?
 
       @logger.info "Launched #{bundle_id}"
       output
@@ -37,14 +37,14 @@ module SimPilot
 
     def screenshot(udid, path)
       _, err, status = Open3.capture3("xcrun", "simctl", "io", udid, "screenshot", path)
-      raise "Failed to take screenshot: #{err}" unless status.success?
+      raise InfraError, "Failed to take screenshot: #{err}" unless status.success?
 
       path
     end
 
     def boot(name_or_udid)
       _, err, status = Open3.capture3("xcrun", "simctl", "boot", name_or_udid)
-      raise "Failed to boot simulator '#{name_or_udid}': #{err}" unless status.success?
+      raise InfraError, "Failed to boot simulator '#{name_or_udid}': #{err}" unless status.success?
     end
   end
 end

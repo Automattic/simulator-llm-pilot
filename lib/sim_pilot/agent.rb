@@ -4,11 +4,6 @@ module SimPilot
   # The core agent loop for a single test case.
   # Sends the test context to the LLM, receives tool calls, executes them,
   # and repeats until the test is complete or limits are hit.
-  #
-  # Hardening:
-  # - Compresses old accessibility trees to manage context/cost (#4)
-  # - Tracks consecutive infra errors and aborts early (#6)
-  # - Reports verification observability metadata (#2)
   class Agent
     SYSTEM_PROMPT = <<~PROMPT
       You are an iOS app test executor. You navigate a WordPress or Jetpack iOS app
@@ -54,14 +49,20 @@ module SimPilot
       - **Failed tap**: If the tree is unchanged after a tap, try: (a) re-fetch tree
         and recompute coordinates, (b) use tap_element, (c) try a slightly offset position.
 
+      ## REST API Usage
+
+      - When using rest_api_call, set purpose=setup for prerequisite/setup work.
+      - When executing a Verification section, set purpose=verification.
+      - When executing a Cleanup section, set purpose=cleanup.
+      - A declared Verification or Cleanup section is not complete unless you actually
+        call rest_api_call with the matching purpose.
+
       ## Rules
 
       - NEVER call the same tool with the same arguments more than 3 times in a row.
       - If stuck after 5 retries on the same step, mark the test as failed.
       - ALWAYS call complete_test exactly once when done, whether pass or fail.
       - Keep your text responses minimal — focus on tool calls, not explanations.
-      - If the test has a Verification section, you MUST call rest_api_call for it.
-      - If the test has a Cleanup section, you MUST call rest_api_call for it.
     PROMPT
 
     MAX_CONSECUTIVE_INFRA_ERRORS = 3
@@ -89,6 +90,10 @@ module SimPilot
         - URL: #{@config.site_url}
         - Username: #{@config.username}
 
+        ## Declared Sections
+        - Verification required: #{verification_expected? ? "yes" : "no"}
+        - Cleanup required: #{cleanup_expected? ? "yes" : "no"}
+
         ## Test Case (from #{File.basename(@test_case.file_path)})
 
         #{@test_case.raw_content}
@@ -115,7 +120,6 @@ module SimPilot
           return build_result("fail", "Test timed out after #{elapsed.round}s")
         end
 
-        # Compress old accessibility trees before sending to manage context size
         compress_old_trees!
 
         response = @llm.create_message(
@@ -127,21 +131,15 @@ module SimPilot
         assistant_content = response["content"]
         @messages << { role: "assistant", content: assistant_content }
 
-        # Log any text the model produces
         assistant_content.each do |block|
           next unless block["type"] == "text" && !block["text"].strip.empty?
 
           @logger.debug "LLM thinks: #{block["text"][0..150]}"
         end
 
-        # Collect tool use blocks
-        tool_uses = assistant_content.select { |b| b["type"] == "tool_use" }
+        tool_uses = assistant_content.select { |block| block["type"] == "tool_use" }
+        return if_completed_or_fail("LLM stopped without calling complete_test") if tool_uses.empty?
 
-        if tool_uses.empty?
-          return if_completed_or_fail("LLM stopped without calling complete_test")
-        end
-
-        # Execute tools and build results
         tool_results = tool_uses.map do |tool_use|
           tool_result = @executor.execute(tool_use["name"], tool_use["input"])
           {
@@ -153,17 +151,19 @@ module SimPilot
 
         @messages << { role: "user", content: tool_results }
 
-        # Check for consecutive infrastructure errors — abort early
-        if @executor.infra_error_count >= MAX_CONSECUTIVE_INFRA_ERRORS
-          @logger.error "Aborting: #{@executor.infra_error_count} infrastructure errors"
-          return build_result("infra_error",
-                              "Aborted after #{@executor.infra_error_count} infrastructure errors — " \
-                              "WDA or simulator may be down")
+        if @executor.consecutive_infra_errors >= MAX_CONSECUTIVE_INFRA_ERRORS
+          @logger.error "Aborting: #{@executor.consecutive_infra_errors} consecutive infrastructure errors"
+          return build_result(
+            "infra_error",
+            "Aborted after #{@executor.consecutive_infra_errors} consecutive infrastructure errors"
+          )
         end
 
-        # Check if test was completed by a tool call
         return if_completed_or_fail(nil) if @executor.test_completed
       end
+    rescue LLMError => e
+      @logger.error e.message
+      build_result("infra_error", e.message)
     end
 
     private
@@ -176,30 +176,96 @@ module SimPilot
       end
     end
 
-    def build_result(status, reason)
+    def build_result(model_status, model_reason)
+      verification_expected = verification_expected?
+      cleanup_expected = cleanup_expected?
+      verification_ran = @executor.rest_api_called?("verification")
+      cleanup_ran = @executor.rest_api_called?("cleanup")
+      verification_satisfied = !verification_expected || @executor.rest_api_satisfied?("verification")
+      cleanup_satisfied = !cleanup_expected || @executor.rest_api_satisfied?("cleanup")
+
+      enforced_failures = if model_status == "infra_error"
+                            []
+                          else
+                            build_enforced_failures(
+                              verification_expected: verification_expected,
+                              verification_ran: verification_ran,
+                              verification_satisfied: verification_satisfied,
+                              cleanup_expected: cleanup_expected,
+                              cleanup_ran: cleanup_ran,
+                              cleanup_satisfied: cleanup_satisfied
+                            )
+                          end
+
+      status, reason = enforce_result(model_status, model_reason, enforced_failures)
+
       {
         status: status,
         reason: reason,
+        model_status: model_status,
+        model_reason: model_reason,
+        enforced_failures: enforced_failures,
         tool_usage: @executor.tool_usage.dup,
-        verification_ran: @executor.rest_api_called?,
-        verification_expected: TestParser.expects_verification?(@test_case),
-        cleanup_expected: TestParser.expects_cleanup?(@test_case),
+        verification_expected: verification_expected,
+        verification_ran: verification_ran,
+        verification_satisfied: verification_satisfied,
+        cleanup_expected: cleanup_expected,
+        cleanup_ran: cleanup_ran,
+        cleanup_satisfied: cleanup_satisfied,
         turns: @turn_count,
-        infra_errors: @executor.infra_error_count
+        total_infra_errors: @executor.total_infra_errors
       }
+    end
+
+    def build_enforced_failures(verification_expected:, verification_ran:, verification_satisfied:,
+                                cleanup_expected:, cleanup_ran:, cleanup_satisfied:)
+      failures = []
+
+      if verification_expected
+        failures << if !verification_ran
+                      "verification section was declared but no verification REST call was made"
+                    elsif !verification_satisfied
+                      "verification REST calls did not complete successfully"
+                    end
+      end
+
+      if cleanup_expected
+        failures << if !cleanup_ran
+                      "cleanup section was declared but no cleanup REST call was made"
+                    elsif !cleanup_satisfied
+                      "cleanup REST calls did not complete successfully"
+                    end
+      end
+
+      failures.compact
+    end
+
+    def enforce_result(model_status, model_reason, enforced_failures)
+      return [model_status, model_reason] if enforced_failures.empty? || model_status == "infra_error"
+
+      combined_reason = "#{model_reason}. Runner enforcement: #{enforced_failures.join('; ')}"
+      [model_status == "pass" ? "fail" : model_status, combined_reason]
+    end
+
+    def verification_expected?
+      TestParser.expects_verification?(@test_case)
+    end
+
+    def cleanup_expected?
+      TestParser.expects_cleanup?(@test_case)
     end
 
     # Compress accessibility tree content in older tool results to manage
     # context window size and reduce token cost. Keeps the most recent
     # trees intact so the model can still reference the current UI state.
     def compress_old_trees!
-      preserve_recent = @config.max_context_turns * 2 # each turn = 2 messages
+      preserve_recent = @config.max_context_turns * 2
       cutoff = @messages.length - preserve_recent
 
-      return if cutoff <= 1 # nothing old enough to compress
+      return if cutoff <= 1
 
-      (1...cutoff).each do |i|
-        msg = @messages[i]
+      (1...cutoff).each do |index|
+        msg = @messages[index]
         next unless msg[:role] == "user"
 
         content = msg[:content]
@@ -212,8 +278,7 @@ module SimPilot
           text = block[:content]
           next unless text.length > 500 && accessibility_tree?(text)
 
-          line_count = text.lines.size
-          block[:content] = "[Accessibility tree — #{line_count} lines, compressed to save context]"
+          block[:content] = "[Accessibility tree — #{text.lines.size} lines, compressed to save context]"
         end
       end
     end

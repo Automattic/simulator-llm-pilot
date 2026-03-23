@@ -6,7 +6,7 @@ module SimPilot
   # 2. Resolve simulator
   # 3. Start WDA
   # 4. Run each test via Agent (with runner-level state reset between tests)
-  # 5. Write results with verification observability metadata
+  # 5. Write results with runner-enforced metadata
   # 6. Stop WDA
   class Runner
     def initialize(config:, logger:)
@@ -29,8 +29,6 @@ module SimPilot
       start_wda!
 
       wda = WDAClient.new(port: @config.wda_port, logger: @logger)
-      wda.create_session
-
       llm = LLMClient.new(
         api_key: @config.anthropic_api_key,
         model: @config.anthropic_model,
@@ -48,39 +46,55 @@ module SimPilot
     private
 
     def run_tests(test_cases, wda, llm)
-      results = []
-
-      test_cases.each_with_index do |test_case, index|
+      test_cases.each_with_index.map do |test_case, index|
         @logger.info ""
         @logger.info "=" * 60
         @logger.info "[#{index + 1}/#{test_cases.length}] #{test_case.title}"
         @logger.info "=" * 60
 
-        # Runner-level clean state: terminate app before each test
-        # This is infrastructure-enforced, not agent-controlled
         reset_app_state!
 
-        agent = Agent.new(
-          test_case: test_case,
-          config: @config,
-          wda: wda,
-          simulator: @simulator,
-          llm: llm,
-          logger: @logger
-        )
-
-        result = agent.run
+        result = prepare_session!(wda, test_case)
+        result ||= run_test_case(test_case, wda, llm)
         result[:test] = test_case.title
         result[:file] = test_case.file_path
-        results << result
 
         log_result(result)
-
-        # Recreate WDA session between tests
-        recreate_session(wda)
+        result
       end
+    end
 
-      results
+    def prepare_session!(wda, test_case)
+      wda.create_session
+      nil
+    rescue StandardError => e
+      {
+        status: "infra_error",
+        reason: "Failed to create WDA session: #{e.message}",
+        model_status: "infra_error",
+        model_reason: "Failed to create WDA session: #{e.message}",
+        enforced_failures: [],
+        tool_usage: {},
+        verification_expected: TestParser.expects_verification?(test_case),
+        verification_ran: false,
+        verification_satisfied: false,
+        cleanup_expected: TestParser.expects_cleanup?(test_case),
+        cleanup_ran: false,
+        cleanup_satisfied: false,
+        turns: 0,
+        total_infra_errors: 1
+      }
+    end
+
+    def run_test_case(test_case, wda, llm)
+      Agent.new(
+        test_case: test_case,
+        config: @config,
+        wda: wda,
+        simulator: @simulator,
+        llm: llm,
+        logger: @logger
+      ).run
     end
 
     def reset_app_state!
@@ -100,21 +114,21 @@ module SimPilot
 
       @logger.info "[#{icon}] #{result[:test]}"
       @logger.info "  #{result[:reason]}"
-
-      # Verification observability warnings
-      if result[:verification_expected] && !result[:verification_ran]
-        @logger.warn "  Test has a Verification section but rest_api_call was never invoked"
-      end
-
-      if result[:status] == "pass" && result[:verification_expected] && !result[:verification_ran]
-        @logger.warn "  SUSPICIOUS PASS: test passed without running verification"
-      end
+      @logger.warn "  Runner enforcement: #{result[:enforced_failures].join('; ')}" if result[:enforced_failures]&.any?
+      log_section_warning("Verification", result[:verification_expected], result[:verification_ran], result[:verification_satisfied])
+      log_section_warning("Cleanup", result[:cleanup_expected], result[:cleanup_ran], result[:cleanup_satisfied])
     end
 
-    def recreate_session(wda)
-      wda.create_session
-    rescue StandardError => e
-      @logger.warn "Failed to recreate WDA session: #{e.message}"
+    def log_section_warning(label, expected, ran, satisfied)
+      return unless expected
+      return if ran && satisfied
+
+      message = if !ran
+                  "#{label} section exists but no matching REST call ran"
+                else
+                  "#{label} REST calls ran but did not finish successfully"
+                end
+      @logger.warn "  #{message}"
     end
 
     def resolve_simulator!
@@ -168,9 +182,10 @@ module SimPilot
     end
 
     def write_results(results)
-      passed = results.count { |r| r[:status] == "pass" }
-      failed = results.count { |r| r[:status] == "fail" }
-      infra = results.count { |r| r[:status] == "infra_error" }
+      passed = results.count { |result| result[:status] == "pass" }
+      failed = results.count { |result| result[:status] == "fail" }
+      infra = results.count { |result| result[:status] == "infra_error" }
+      enforced = results.count { |result| result[:enforced_failures]&.any? }
 
       lines = [
         "# Test Results\n",
@@ -178,25 +193,25 @@ module SimPilot
         "- **Site:** #{@config.site_url}",
         "- **Model:** #{@config.anthropic_model}",
         "- **Total:** #{results.length} | **Passed:** #{passed} | **Failed:** #{failed}" \
-          "#{" | **Infra errors:** #{infra}" if infra > 0}\n",
+          "#{" | **Infra errors:** #{infra}" if infra > 0}" \
+          "#{" | **Enforced failures:** #{enforced}" if enforced > 0}\n",
         "## Results\n"
       ]
 
-      results.each do |r|
-        status_label = case r[:status]
+      results.each do |result|
+        status_label = case result[:status]
                        when "pass" then "PASS"
                        when "infra_error" then "INFRA_ERROR"
                        else "FAIL"
                        end
-        lines << "### #{status_label} #{r[:test]}"
-        lines << r[:reason].to_s
 
-        # Verification observability
-        if r[:verification_expected] && !r[:verification_ran]
-          lines << "**Warning:** Verification section exists but `rest_api_call` was not invoked."
-        end
-
-        lines << "Turns: #{r[:turns]} | Tools: #{r[:tool_usage]&.map { |k, v| "#{k}(#{v})" }&.join(", ")}"
+        lines << "### #{status_label} #{result[:test]}"
+        lines << result[:reason].to_s
+        lines << "Model status: #{result[:model_status]} | Turns: #{result[:turns]} | Total infra errors: #{result[:total_infra_errors]}"
+        lines << "Verification: #{section_state(result[:verification_expected], result[:verification_ran], result[:verification_satisfied])}"
+        lines << "Cleanup: #{section_state(result[:cleanup_expected], result[:cleanup_ran], result[:cleanup_satisfied])}"
+        lines << "Tools: #{format_tool_usage(result[:tool_usage])}"
+        lines << "Runner enforcement: #{result[:enforced_failures].join('; ')}" if result[:enforced_failures]&.any?
         lines << ""
       end
 
@@ -206,19 +221,33 @@ module SimPilot
     end
 
     def print_summary(results)
-      passed = results.count { |r| r[:status] == "pass" }
-      failed = results.count { |r| r[:status] == "fail" }
-      infra = results.count { |r| r[:status] == "infra_error" }
-      suspicious = results.count { |r| r[:status] == "pass" && r[:verification_expected] && !r[:verification_ran] }
+      passed = results.count { |result| result[:status] == "pass" }
+      failed = results.count { |result| result[:status] == "fail" }
+      infra = results.count { |result| result[:status] == "infra_error" }
+      enforced = results.count { |result| result[:enforced_failures]&.any? }
 
       @logger.info ""
       @logger.info "=" * 60
       summary = "DONE — Total: #{results.length} | Passed: #{passed} | Failed: #{failed}"
       summary += " | Infra errors: #{infra}" if infra > 0
+      summary += " | Enforced failures: #{enforced}" if enforced > 0
       @logger.info summary
-      @logger.warn "#{suspicious} test(s) passed without running expected verification" if suspicious > 0
       @logger.info "Results: #{@config.results_dir}"
       @logger.info "=" * 60
+    end
+
+    def section_state(expected, ran, satisfied)
+      return "not declared" unless expected
+      return "passed" if ran && satisfied
+      return "missing" unless ran
+
+      "failed"
+    end
+
+    def format_tool_usage(tool_usage)
+      return "none" if tool_usage.nil? || tool_usage.empty?
+
+      tool_usage.map { |name, count| "#{name}(#{count})" }.join(", ")
     end
   end
 end

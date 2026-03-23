@@ -30,6 +30,10 @@ module SimPilot
       errors << "--site-url is required (or set SIM_PILOT_SITE_URL)" if blank?(@site_url)
       errors << "--username is required (or set SIM_PILOT_USERNAME)" if blank?(@username)
       errors << "--app-password is required (or set SIM_PILOT_APP_PASSWORD)" if blank?(@app_password)
+      errors << "--wda-port must be a positive integer" unless positive_integer?(@wda_port)
+      errors << "--max-turns must be a positive integer" unless positive_integer?(@max_turns_per_test)
+      errors << "--timeout must be a positive integer" unless positive_integer?(@test_timeout)
+      errors << "--max-context-turns must be zero or greater" if @max_context_turns.nil? || @max_context_turns.negative?
 
       raise ArgumentError, "Configuration errors:\n  #{errors.join("\n  ")}" unless errors.empty?
     end
@@ -38,6 +42,10 @@ module SimPilot
 
     def blank?(value)
       value.nil? || value.strip.empty?
+    end
+
+    def positive_integer?(value)
+      value.is_a?(Integer) && value.positive?
     end
   end
 end

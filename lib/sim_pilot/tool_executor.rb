@@ -1,16 +1,14 @@
 # frozen_string_literal: true
 
 module SimPilot
-  # Raised for infrastructure-level failures (WDA down, simulator crash, etc.)
-  # as distinct from test-level failures (element not found, wrong screen).
-  class InfraError < StandardError; end
-
   # Executes tool calls from the LLM against the actual simulator/WDA/REST API.
   # This is the enforcement layer — only these operations are possible.
-  # Tracks tool usage by category for verification observability.
   class ToolExecutor
+    MAX_REST_RESPONSE_CHARS = 2_000
+
     attr_reader :test_completed, :test_status, :test_reason,
-                :infra_error_count, :tool_usage
+                :total_infra_errors, :consecutive_infra_errors,
+                :tool_usage, :rest_api_usage
 
     def initialize(wda:, simulator:, config:, logger:)
       @wda = wda
@@ -21,8 +19,19 @@ module SimPilot
       @test_status = nil
       @test_reason = nil
       @screenshot_count = 0
-      @infra_error_count = 0
-      @tool_usage = Hash.new(0) # tracks call count per tool name
+      @total_infra_errors = 0
+      @consecutive_infra_errors = 0
+      @tool_usage = Hash.new(0)
+      @rest_api_usage = Hash.new do |hash, purpose|
+        hash[purpose] = {
+          calls: 0,
+          successes: 0,
+          failures: 0,
+          last_status: nil,
+          last_success: false,
+          last_error: nil
+        }
+      end
     end
 
     def execute(tool_name, input)
@@ -44,35 +53,37 @@ module SimPilot
                else "Unknown tool: #{tool_name}"
                end
 
+      @consecutive_infra_errors = 0
       @logger.debug "Tool result: #{truncate(result.to_s, 300)}"
       result
-    rescue Errno::ECONNREFUSED, Errno::ECONNRESET, Errno::ETIMEDOUT => e
-      @infra_error_count += 1
-      msg = "INFRASTRUCTURE ERROR: #{e.message}. WDA or simulator may be down."
-      @logger.error msg
-      msg
     rescue InfraError => e
-      @infra_error_count += 1
+      @total_infra_errors += 1
+      @consecutive_infra_errors += 1
       msg = "INFRASTRUCTURE ERROR: #{e.message}"
       @logger.error msg
       msg
     rescue StandardError => e
+      @consecutive_infra_errors = 0
       @logger.error "Tool #{tool_name} error: #{e.message}"
       "Error: #{e.message}"
     end
 
-    # Whether rest_api_call was ever invoked (for verification observability)
-    def rest_api_called?
-      @tool_usage["rest_api_call"] > 0
+    def rest_api_called?(purpose = nil)
+      return @tool_usage["rest_api_call"] > 0 if purpose.nil?
+
+      @rest_api_usage[purpose][:calls] > 0
+    end
+
+    def rest_api_satisfied?(purpose)
+      usage = @rest_api_usage[purpose]
+      usage[:calls] > 0 && usage[:last_success]
     end
 
     private
 
     def exec_get_tree
       tree = @wda.get_tree(format: :description)
-      if tree.nil? || tree.empty?
-        raise InfraError, "Empty accessibility tree — WDA session may have expired"
-      end
+      raise InfraError, "Empty accessibility tree — WDA session may have expired" if tree.nil? || tree.empty?
 
       tree
     end
@@ -157,11 +168,13 @@ module SimPilot
     end
 
     def exec_rest_api(input)
+      purpose = input["purpose"]
       method = input["method"]
       path = input["path"]
       body = input["body"]
       query = input["query"]
 
+      validate_rest_api_purpose!(purpose)
       validate_rest_api_path!(path)
 
       uri = URI("#{@config.site_url}#{path}")
@@ -178,19 +191,19 @@ module SimPilot
 
       response = Net::HTTP.start(uri.hostname, uri.port, use_ssl: uri.scheme == "https") do |http|
         http.read_timeout = 30
+        http.open_timeout = 10
         http.request(request)
       end
 
-      @logger.info "  REST #{method} #{path} -> #{response.code}"
+      status_code = response.code.to_i
+      success = status_code.between?(200, 299)
+      record_rest_api_result(purpose, success: success, status: status_code, error: nil)
+      @logger.info "  REST #{purpose} #{method} #{path} -> #{response.code}"
 
-      result = "HTTP #{response.code}\n"
-      begin
-        parsed = JSON.parse(response.body)
-        result += JSON.pretty_generate(parsed)
-      rescue JSON::ParserError
-        result += response.body[0..1000]
-      end
-      result
+      "HTTP #{response.code}\n#{format_rest_response_body(response.body)}"
+    rescue StandardError => e
+      record_rest_api_result(purpose, success: false, status: nil, error: e.message) if purpose
+      raise
     end
 
     def exec_wait(input)
@@ -205,6 +218,13 @@ module SimPilot
       @test_reason = input["reason"]
       @logger.info "  Test result: #{@test_status.upcase} — #{@test_reason}"
       "Test marked as #{@test_status}: #{@test_reason}"
+    end
+
+    def validate_rest_api_purpose!(purpose)
+      return if %w[setup verification cleanup].include?(purpose)
+
+      raise "REST API purpose '#{purpose}' is not allowed. " \
+            "Use setup, verification, or cleanup."
     end
 
     def validate_rest_api_path!(path)
@@ -224,6 +244,25 @@ module SimPilot
       when "DELETE" then Net::HTTP::Delete.new(uri)
       else raise "Unsupported HTTP method: #{method}"
       end
+    end
+
+    def record_rest_api_result(purpose, success:, status:, error:)
+      usage = @rest_api_usage[purpose]
+      usage[:calls] += 1
+      success ? usage[:successes] += 1 : usage[:failures] += 1
+      usage[:last_status] = status
+      usage[:last_success] = success
+      usage[:last_error] = error
+    end
+
+    def format_rest_response_body(body)
+      text = begin
+        JSON.pretty_generate(JSON.parse(body))
+      rescue JSON::ParserError
+        body.to_s
+      end
+
+      truncate(text, MAX_REST_RESPONSE_CHARS)
     end
 
     def truncate(str, max)

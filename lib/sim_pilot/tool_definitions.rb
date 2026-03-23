@@ -109,11 +109,18 @@ module SimPilot
         },
         {
           name: "rest_api_call",
-          description: "Make a WordPress REST API call to the test site for verification or cleanup. " \
-                       "Authentication is handled automatically via the configured credentials.",
+          description: "Make a WordPress REST API call to the test site. " \
+                       "Authentication is handled automatically via the configured credentials. " \
+                       "You MUST set purpose to setup, verification, or cleanup so the runner can " \
+                       "enforce that declared test sections were actually executed.",
           input_schema: {
             type: "object",
             properties: {
+              purpose: {
+                type: "string",
+                enum: %w[setup verification cleanup],
+                description: "Why this call is being made"
+              },
               method: { type: "string", enum: %w[GET POST PUT DELETE], description: "HTTP method" },
               path: {
                 type: "string",
@@ -125,7 +132,7 @@ module SimPilot
                 description: 'Query parameters as key-value pairs (e.g., {"search": "title", "status": "publish"})'
               }
             },
-            required: %w[method path]
+            required: %w[purpose method path]
           }
         },
         {

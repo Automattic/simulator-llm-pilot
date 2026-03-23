@@ -35,6 +35,7 @@ The key problem with running an LLM CLI (like Claude Code) directly in CI is tha
 4. **sim_pilot** executes each tool call against the simulator via **WebDriverAgent** and `xcrun simctl`.
 5. Results are returned to the LLM, which decides the next action.
 6. This loops until the LLM calls `complete_test` with a pass/fail verdict.
+7. The runner enforces declared test sections: a model-declared pass is downgraded to fail if required verification or cleanup REST work did not run successfully.
 
 The LLM **cannot** execute shell commands, write scripts, access the filesystem, or make arbitrary network requests. Every action goes through the tool executor.
 
@@ -52,7 +53,7 @@ The LLM has access to exactly these operations:
 | `clear_text` | Select all + delete in the focused field |
 | `take_screenshot` | Capture simulator screenshot |
 | `launch_app` | (Re)launch the app with test credentials |
-| `rest_api_call` | WordPress REST API call (for verification/cleanup) |
+| `rest_api_call` | WordPress REST API call with `purpose=setup`, `verification`, or `cleanup` |
 | `wait` | Pause up to 10 seconds |
 | `complete_test` | Mark the test as pass or fail |
 
@@ -189,6 +190,14 @@ results/2026-03-23-1430/
 ```
 
 The process exits with code 0 if all tests pass, 1 if any fail.
+
+## Development
+
+Run the unit test suite with:
+
+```bash
+rake test
+```
 
 ## Project structure
 

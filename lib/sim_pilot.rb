@@ -9,6 +9,7 @@ require "base64"
 require "optparse"
 
 require_relative "sim_pilot/version"
+require_relative "sim_pilot/errors"
 require_relative "sim_pilot/logger"
 require_relative "sim_pilot/config"
 require_relative "sim_pilot/test_parser"

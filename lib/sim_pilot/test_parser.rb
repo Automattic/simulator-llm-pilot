@@ -7,7 +7,7 @@ module SimPilot
     def self.parse(file_path)
       content = File.read(file_path)
       title = content.match(/^#\s+(.+)$/)&.[](1) || File.basename(file_path, ".md")
-      sections = content.scan(/^##\s+(.+)$/).flatten.map(&:strip)
+      sections = extract_sections(content)
 
       TestCase.new(
         title: title,
@@ -29,12 +29,39 @@ module SimPilot
 
     # Check if a test case declares a verification section
     def self.expects_verification?(test_case)
-      test_case.sections.any? { |s| s.match?(/verification/i) }
+      section_present?(test_case, /verification/i)
     end
 
     # Check if a test case declares a cleanup section
     def self.expects_cleanup?(test_case)
-      test_case.sections.any? { |s| s.match?(/cleanup/i) }
+      section_present?(test_case, /cleanup/i)
+    end
+
+    def self.extract_sections(content)
+      sections = {}
+      current_name = nil
+      buffer = []
+
+      content.each_line do |line|
+        heading = line.match(/^##\s+(.+)$/)
+        if heading
+          sections[current_name] = buffer.join.strip if current_name
+          current_name = heading[1].strip
+          buffer = []
+          next
+        end
+
+        buffer << line if current_name
+      end
+
+      sections[current_name] = buffer.join.strip if current_name
+      sections
+    end
+
+    def self.section_present?(test_case, pattern)
+      test_case.sections.any? do |name, body|
+        name.match?(pattern) && !body.to_s.strip.empty?
+      end
     end
   end
 end

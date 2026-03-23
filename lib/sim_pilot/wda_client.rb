@@ -4,6 +4,16 @@ module SimPilot
   # HTTP client for WebDriverAgent running on a simulator.
   # All UI interactions (tap, swipe, type, read tree) go through this client.
   class WDAClient
+    INFRA_ERROR_TYPES = [
+      Errno::ECONNREFUSED,
+      Errno::ECONNRESET,
+      Errno::ETIMEDOUT,
+      Net::OpenTimeout,
+      Net::ReadTimeout,
+      SocketError,
+      EOFError
+    ].freeze
+
     attr_reader :session_id
 
     def initialize(port: 8100, logger:)
@@ -20,7 +30,9 @@ module SimPilot
       response = post("/session", {
         capabilities: { alwaysMatch: {} }
       })
-      @session_id = response.dig("value", "sessionId")
+      @session_id = response.dig("value", "sessionId") || response["sessionId"]
+      raise InfraError, "WDA did not return a session id" if @session_id.nil? || @session_id.empty?
+
       @logger.info "WDA session: #{@session_id}"
       @session_id
     end
@@ -33,6 +45,7 @@ module SimPilot
     end
 
     def tap_at(x, y)
+      ensure_session!
       pointer_action([
         { type: "pointerMove", duration: 0, x: x, y: y },
         { type: "pointerDown" },
@@ -41,6 +54,7 @@ module SimPilot
     end
 
     def long_press(x, y, duration_ms: 1000)
+      ensure_session!
       pointer_action([
         { type: "pointerMove", duration: 0, x: x, y: y },
         { type: "pointerDown" },
@@ -50,6 +64,7 @@ module SimPilot
     end
 
     def swipe(x1, y1, x2, y2, duration: 500)
+      ensure_session!
       pointer_action([
         { type: "pointerMove", duration: 0, x: x1, y: y1 },
         { type: "pointerDown" },
@@ -59,19 +74,18 @@ module SimPilot
     end
 
     def type_text(text)
+      ensure_session!
       post("/session/#{@session_id}/wda/keys", { value: text.chars })
     end
 
     def clear_text
-      # Select all (Ctrl+A) then delete
+      ensure_session!
       post("/session/#{@session_id}/wda/keys", { value: ["\u0001"] })
       post("/session/#{@session_id}/wda/keys", { value: ["\u007F"] })
     end
 
-    # Find elements by accessibility id or label.
-    # using: "accessibility id", "link text", "partial link text",
-    #        "class name", "xpath", "predicate string", "class chain"
     def find_elements(using:, value:)
+      ensure_session!
       response = post("/session/#{@session_id}/elements", {
         using: using,
         value: value
@@ -88,14 +102,22 @@ module SimPilot
     end
 
     def click_element(element_id)
+      ensure_session!
       post("/session/#{@session_id}/element/#{element_id}/click")
     end
 
     def press_button(name)
+      ensure_session!
       post("/session/#{@session_id}/wda/pressButton", { name: name })
     end
 
     private
+
+    def ensure_session!
+      return if @session_id
+
+      raise InfraError, "WDA session is not available"
+    end
 
     def pointer_action(actions)
       post("/session/#{@session_id}/actions", {
@@ -110,10 +132,15 @@ module SimPilot
 
     def get(path)
       uri = URI("#{@base_url}#{path}")
-      response = Net::HTTP.get_response(uri)
-      JSON.parse(response.body)
-    rescue StandardError => e
-      raise "WDA GET #{path} failed: #{e.message}"
+      response = Net::HTTP.start(uri.hostname, uri.port) do |http|
+        http.read_timeout = 30
+        http.open_timeout = 10
+        http.request(Net::HTTP::Get.new(uri))
+      end
+
+      parse_response("GET", path, response)
+    rescue *INFRA_ERROR_TYPES => e
+      raise InfraError, "WDA GET #{path} failed: #{e.message}"
     end
 
     def post(path, body = nil)
@@ -124,12 +151,41 @@ module SimPilot
 
       response = Net::HTTP.start(uri.hostname, uri.port) do |http|
         http.read_timeout = 30
+        http.open_timeout = 10
         http.request(request)
       end
 
-      JSON.parse(response.body)
-    rescue StandardError => e
-      raise "WDA POST #{path} failed: #{e.message}"
+      parse_response("POST", path, response)
+    rescue *INFRA_ERROR_TYPES => e
+      raise InfraError, "WDA POST #{path} failed: #{e.message}"
+    end
+
+    def parse_response(method, path, response)
+      parsed = JSON.parse(response.body)
+      error_type = parsed.dig("value", "error") || parsed["error"]
+      error_message = parsed.dig("value", "message") || parsed["message"]
+
+      if response.code.to_i >= 500
+        raise InfraError, "WDA #{method} #{path} failed (HTTP #{response.code}): #{error_message || response.body}"
+      end
+
+      if infra_session_error?(error_type)
+        raise InfraError, "WDA #{method} #{path} failed: #{error_type}: #{error_message}"
+      end
+
+      if response.code.to_i >= 400 || error_type
+        detail = [error_type, error_message].compact.join(": ")
+        detail = response.body if detail.empty?
+        raise "WDA #{method} #{path} failed (HTTP #{response.code}): #{detail}"
+      end
+
+      parsed
+    rescue JSON::ParserError => e
+      raise InfraError, "WDA #{method} #{path} returned invalid JSON: #{e.message}"
+    end
+
+    def infra_session_error?(error_type)
+      %w[invalid\ session\ id session\ not\ created].include?(error_type)
     end
   end
 end
