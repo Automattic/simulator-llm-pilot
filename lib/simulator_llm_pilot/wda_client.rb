@@ -16,22 +16,22 @@ module SimulatorLLMPilot
 
     attr_reader :session_id
 
-    def initialize(port: 8100, logger:)
+    def initialize(logger:, port: 8100)
       @base_url = "http://localhost:#{port}"
       @logger = logger
       @session_id = nil
     end
 
     def status
-      get("/status")
+      get('/status')
     end
 
     def create_session
-      response = post("/session", {
-        capabilities: { alwaysMatch: {} }
-      })
-      @session_id = response.dig("value", "sessionId") || response["sessionId"]
-      raise InfraError, "WDA did not return a session id" if @session_id.nil? || @session_id.empty?
+      response = post('/session', {
+                        capabilities: { alwaysMatch: {} }
+                      })
+      @session_id = response.dig('value', 'sessionId') || response['sessionId']
+      raise InfraError, 'WDA did not return a session id' if @session_id.nil? || @session_id.empty?
 
       @logger.info "WDA session: #{@session_id}"
       @session_id
@@ -42,36 +42,36 @@ module SimulatorLLMPilot
     def get_tree(format: :description)
       ensure_session!
       response = get("/source?format=#{format}")
-      response["value"]
+      response['value']
     end
 
     def tap_at(x, y)
       ensure_session!
       pointer_action([
-        { type: "pointerMove", duration: 0, x: x, y: y },
-        { type: "pointerDown" },
-        { type: "pointerUp" }
-      ])
+                       { type: 'pointerMove', duration: 0, x: x, y: y },
+                       { type: 'pointerDown' },
+                       { type: 'pointerUp' }
+                     ])
     end
 
     def long_press(x, y, duration_ms: 1000)
       ensure_session!
       pointer_action([
-        { type: "pointerMove", duration: 0, x: x, y: y },
-        { type: "pointerDown" },
-        { type: "pause", duration: duration_ms },
-        { type: "pointerUp" }
-      ])
+                       { type: 'pointerMove', duration: 0, x: x, y: y },
+                       { type: 'pointerDown' },
+                       { type: 'pause', duration: duration_ms },
+                       { type: 'pointerUp' }
+                     ])
     end
 
     def swipe(x1, y1, x2, y2, duration: 500)
       ensure_session!
       pointer_action([
-        { type: "pointerMove", duration: 0, x: x1, y: y1 },
-        { type: "pointerDown" },
-        { type: "pointerMove", duration: duration, x: x2, y: y2 },
-        { type: "pointerUp" }
-      ])
+                       { type: 'pointerMove', duration: 0, x: x1, y: y1 },
+                       { type: 'pointerDown' },
+                       { type: 'pointerMove', duration: duration, x: x2, y: y2 },
+                       { type: 'pointerUp' }
+                     ])
     end
 
     def type_text(text)
@@ -88,10 +88,10 @@ module SimulatorLLMPilot
     def find_elements(using:, value:)
       ensure_session!
       response = post("/session/#{@session_id}/elements", {
-        using: using,
-        value: value
-      })
-      response["value"] || []
+                        using: using,
+                        value: value
+                      })
+      response['value'] || []
     end
 
     def find_element(using:, value:)
@@ -99,7 +99,7 @@ module SimulatorLLMPilot
       return nil if elements.empty?
 
       element = elements.first
-      element["ELEMENT"] || element.values.first
+      element['ELEMENT'] || element.values.first
     end
 
     def click_element(element_id)
@@ -117,18 +117,18 @@ module SimulatorLLMPilot
     def ensure_session!
       return if @session_id
 
-      raise InfraError, "WDA session is not available"
+      raise InfraError, 'WDA session is not available'
     end
 
     def pointer_action(actions)
       post("/session/#{@session_id}/actions", {
-        actions: [{
-          type: "pointer",
-          id: "finger1",
-          parameters: { pointerType: "touch" },
-          actions: actions
-        }]
-      })
+             actions: [{
+               type: 'pointer',
+               id: 'finger1',
+               parameters: { pointerType: 'touch' },
+               actions: actions
+             }]
+           })
     end
 
     def get(path)
@@ -139,7 +139,7 @@ module SimulatorLLMPilot
         http.request(Net::HTTP::Get.new(uri))
       end
 
-      parse_response("GET", path, response)
+      parse_response('GET', path, response)
     rescue *INFRA_ERROR_TYPES => e
       raise InfraError, "WDA GET #{path} failed: #{e.message}"
     end
@@ -147,7 +147,7 @@ module SimulatorLLMPilot
     def post(path, body = nil)
       uri = URI("#{@base_url}#{path}")
       request = Net::HTTP::Post.new(uri)
-      request["Content-Type"] = "application/json"
+      request['Content-Type'] = 'application/json'
       request.body = JSON.generate(body) if body
 
       response = Net::HTTP.start(uri.hostname, uri.port) do |http|
@@ -156,7 +156,7 @@ module SimulatorLLMPilot
         http.request(request)
       end
 
-      parse_response("POST", path, response)
+      parse_response('POST', path, response)
     rescue *INFRA_ERROR_TYPES => e
       raise InfraError, "WDA POST #{path} failed: #{e.message}"
     end
@@ -164,19 +164,15 @@ module SimulatorLLMPilot
     def parse_response(method, path, response)
       parsed = JSON.parse(response.body)
       error_source = error_metadata_source(parsed)
-      error_type = error_source&.[]("error")
-      error_message = error_source&.[]("message")
+      error_type = error_source&.[]('error')
+      error_message = error_source&.[]('message')
 
-      if response.code.to_i >= 500
-        raise InfraError, "WDA #{method} #{path} failed (HTTP #{response.code}): #{error_message || response.body}"
-      end
+      raise InfraError, "WDA #{method} #{path} failed (HTTP #{response.code}): #{error_message || response.body}" if response.code.to_i >= 500
 
-      if infra_session_error?(error_type)
-        raise InfraError, "WDA #{method} #{path} failed: #{error_type}: #{error_message}"
-      end
+      raise InfraError, "WDA #{method} #{path} failed: #{error_type}: #{error_message}" if infra_session_error?(error_type)
 
       if response.code.to_i >= 400 || error_type
-        detail = [error_type, error_message].compact.join(": ")
+        detail = [error_type, error_message].compact.join(': ')
         detail = response.body if detail.empty?
         raise "WDA #{method} #{path} failed (HTTP #{response.code}): #{detail}"
       end
@@ -187,13 +183,13 @@ module SimulatorLLMPilot
     end
 
     def infra_session_error?(error_type)
-      %w[invalid\ session\ id session\ not\ created].include?(error_type)
+      ['invalid session id', 'session not created'].include?(error_type)
     end
 
     def error_metadata_source(parsed)
       return parsed unless parsed.is_a?(Hash)
 
-      value = parsed["value"]
+      value = parsed['value']
       return value if value.is_a?(Hash)
 
       parsed

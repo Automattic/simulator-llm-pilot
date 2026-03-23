@@ -80,7 +80,7 @@ module SimulatorLLMPilot
     def run
       @logger.info "Starting: #{@test_case.title}"
 
-      app_name = @config.app_bundle_id.include?("jetpack") ? "Jetpack" : "WordPress"
+      app_name = @config.app_bundle_id.include?('jetpack') ? 'Jetpack' : 'WordPress'
 
       user_message = <<~MSG
         ## App
@@ -91,8 +91,8 @@ module SimulatorLLMPilot
         - Username: #{@config.username}
 
         ## Declared Sections
-        - Verification required: #{verification_expected? ? "yes" : "no"}
-        - Cleanup required: #{cleanup_expected? ? "yes" : "no"}
+        - Verification required: #{verification_expected? ? 'yes' : 'no'}
+        - Cleanup required: #{cleanup_expected? ? 'yes' : 'no'}
 
         ## Test Case (from #{File.basename(@test_case.file_path)})
 
@@ -102,7 +102,7 @@ module SimulatorLLMPilot
         Execute this test case now. Start by launching the app, then follow the steps.
       MSG
 
-      @messages = [{ role: "user", content: user_message }]
+      @messages = [{ role: 'user', content: user_message }]
       tools = ToolDefinitions.all
       start_time = Time.now
 
@@ -111,13 +111,13 @@ module SimulatorLLMPilot
 
         if @turn_count > @config.max_turns_per_test
           @logger.warn "Max turns (#{@config.max_turns_per_test}) exceeded"
-          return build_result("fail", "Exceeded maximum tool call turns (#{@config.max_turns_per_test})")
+          return build_result('fail', "Exceeded maximum tool call turns (#{@config.max_turns_per_test})")
         end
 
         elapsed = Time.now - start_time
         if elapsed > @config.test_timeout
           @logger.warn "Timeout (#{@config.test_timeout}s) exceeded"
-          return build_result("fail", "Test timed out after #{elapsed.round}s")
+          return build_result('fail', "Test timed out after #{elapsed.round}s")
         end
 
         compress_old_trees!
@@ -128,33 +128,33 @@ module SimulatorLLMPilot
           tools: tools
         )
 
-        assistant_content = response["content"]
-        @messages << { role: "assistant", content: assistant_content }
+        assistant_content = response['content']
+        @messages << { role: 'assistant', content: assistant_content }
 
         assistant_content.each do |block|
-          next unless block["type"] == "text" && !block["text"].strip.empty?
+          next unless block['type'] == 'text' && !block['text'].strip.empty?
 
-          @logger.debug "LLM thinks: #{block["text"][0..150]}"
+          @logger.debug "LLM thinks: #{block['text'][0..150]}"
         end
 
-        tool_uses = assistant_content.select { |block| block["type"] == "tool_use" }
-        return if_completed_or_fail("LLM stopped without calling complete_test") if tool_uses.empty?
+        tool_uses = assistant_content.select { |block| block['type'] == 'tool_use' }
+        return if_completed_or_fail('LLM stopped without calling complete_test') if tool_uses.empty?
 
         tool_results = tool_uses.map do |tool_use|
-          tool_result = @executor.execute(tool_use["name"], tool_use["input"])
+          tool_result = @executor.execute(tool_use['name'], tool_use['input'])
           {
-            type: "tool_result",
-            tool_use_id: tool_use["id"],
+            type: 'tool_result',
+            tool_use_id: tool_use['id'],
             content: tool_result.to_s
           }
         end
 
-        @messages << { role: "user", content: tool_results }
+        @messages << { role: 'user', content: tool_results }
 
         if @executor.consecutive_infra_errors >= MAX_CONSECUTIVE_INFRA_ERRORS
           @logger.error "Aborting: #{@executor.consecutive_infra_errors} consecutive infrastructure errors"
           return build_result(
-            "infra_error",
+            'infra_error',
             "Aborted after #{@executor.consecutive_infra_errors} consecutive infrastructure errors"
           )
         end
@@ -163,7 +163,7 @@ module SimulatorLLMPilot
       end
     rescue LLMError => e
       @logger.error e.message
-      build_result("infra_error", e.message)
+      build_result('infra_error', e.message)
     end
 
     private
@@ -172,19 +172,19 @@ module SimulatorLLMPilot
       if @executor.test_completed
         build_result(@executor.test_status, @executor.test_reason)
       else
-        build_result("fail", fallback_reason)
+        build_result('fail', fallback_reason)
       end
     end
 
     def build_result(model_status, model_reason)
       verification_expected = verification_expected?
       cleanup_expected = cleanup_expected?
-      verification_ran = @executor.rest_api_called?("verification")
-      cleanup_ran = @executor.rest_api_called?("cleanup")
-      verification_satisfied = !verification_expected || @executor.rest_api_satisfied?("verification")
-      cleanup_satisfied = !cleanup_expected || @executor.rest_api_satisfied?("cleanup")
+      verification_ran = @executor.rest_api_called?('verification')
+      cleanup_ran = @executor.rest_api_called?('cleanup')
+      verification_satisfied = !verification_expected || @executor.rest_api_satisfied?('verification')
+      cleanup_satisfied = !cleanup_expected || @executor.rest_api_satisfied?('cleanup')
 
-      enforced_failures = if model_status == "infra_error"
+      enforced_failures = if model_status == 'infra_error'
                             []
                           else
                             build_enforced_failures(
@@ -223,17 +223,17 @@ module SimulatorLLMPilot
 
       if verification_expected
         if !verification_ran
-          failures << "verification section was declared but no verification REST call was made"
+          failures << 'verification section was declared but no verification REST call was made'
         elsif !verification_satisfied
-          failures << "verification REST calls did not complete successfully"
+          failures << 'verification REST calls did not complete successfully'
         end
       end
 
       if cleanup_expected
         if !cleanup_ran
-          failures << "cleanup section was declared but no cleanup REST call was made"
+          failures << 'cleanup section was declared but no cleanup REST call was made'
         elsif !cleanup_satisfied
-          failures << "cleanup REST calls did not complete successfully"
+          failures << 'cleanup REST calls did not complete successfully'
         end
       end
 
@@ -241,10 +241,10 @@ module SimulatorLLMPilot
     end
 
     def enforce_result(model_status, model_reason, enforced_failures)
-      return [model_status, model_reason] if enforced_failures.empty? || model_status == "infra_error"
+      return [model_status, model_reason] if enforced_failures.empty? || model_status == 'infra_error'
 
       combined_reason = "#{model_reason}. Runner enforcement: #{enforced_failures.join('; ')}"
-      [model_status == "pass" ? "fail" : model_status, combined_reason]
+      [model_status == 'pass' ? 'fail' : model_status, combined_reason]
     end
 
     def verification_expected?
@@ -266,13 +266,13 @@ module SimulatorLLMPilot
 
       (1...cutoff).each do |index|
         msg = @messages[index]
-        next unless msg[:role] == "user"
+        next unless msg[:role] == 'user'
 
         content = msg[:content]
         next unless content.is_a?(Array)
 
         content.each do |block|
-          next unless block[:type] == "tool_result"
+          next unless block[:type] == 'tool_result'
           next unless block[:content].is_a?(String)
 
           text = block[:content]
@@ -284,7 +284,7 @@ module SimulatorLLMPilot
     end
 
     def accessibility_tree?(text)
-      text.include?("Element subtree:") || text.match?(/\AAttributes: Window/)
+      text.include?('Element subtree:') || text.match?(/\AAttributes: Window/)
     end
   end
 end

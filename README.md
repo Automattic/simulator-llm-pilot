@@ -91,7 +91,7 @@ Tests are markdown files with natural-language sections. Example:
 ## Prerequisites
 
 - **macOS** with Xcode and iOS Simulators
-- **Ruby** >= 3.0
+- **Ruby** >= 3.2
 - **WebDriverAgent** built for simulator use (see [Setup](#wda-setup))
 - **ANTHROPIC_API_KEY** environment variable
 - The app built and installed on a booted simulator
@@ -193,11 +193,19 @@ The process exits with code 0 if all tests pass, 1 if any fail.
 
 ## Development
 
-Run the unit test suite with:
-
 ```bash
-rake test
+bundle install
+bundle exec rake        # runs tests + rubocop
+bundle exec rake test   # tests only
+bundle exec rubocop     # lint only
 ```
+
+## Releasing
+
+1. Add entries under `## Trunk` in `CHANGELOG.md` (subsections: Breaking Changes, New Features, Bug Fixes, Internal Changes).
+2. Run `bundle exec rake new_release` — it bumps the version, updates the changelog, pushes a `release/<version>` branch, and opens a PR.
+3. Merge the PR into `main`.
+4. Create a GitHub Release with a tag matching the version (e.g. `0.2.0`). The tag triggers Buildkite to publish the gem to RubyGems.
 
 ## Project structure
 

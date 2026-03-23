@@ -1,0 +1,88 @@
+plugins:
+  - rubocop-rake
+  - rubocop-minitest
+
+AllCops:
+  NewCops: enable
+
+Style/HashSyntax:
+  EnforcedShorthandSyntax: never
+
+########## Gemspec Rules
+
+# Disabling this as all the gem publishing will be done within CI and doesn't allow for user input such as an MFA code.
+Gemspec/RequireMFA:
+  Enabled: false
+
+Gemspec/DevelopmentDependencies:
+  EnforcedStyle: gemspec
+
+########## Metrics / Max Lengths Rules
+
+Layout/LineLength:
+  Max: 300
+
+Metrics/AbcSize:
+  Max: 140
+
+Metrics/BlockLength:
+  Max: 80
+  Exclude:
+   - test/**/*_test.rb
+
+Metrics/ClassLength:
+  Max: 300
+
+Metrics/MethodLength:
+  Max: 160
+
+Metrics/ModuleLength:
+  Max: 300
+  Exclude:
+    - test/**/*_test.rb
+
+Metrics/ParameterLists:
+  Max: 10
+
+########## Metrics / Complexity
+
+Metrics/CyclomaticComplexity:
+  Max: 20
+
+Metrics/PerceivedComplexity:
+  Max: 20
+
+########## Naming Rules
+
+# x, y, x1, y1 etc. are perfectly clear for coordinate parameters
+Naming/MethodParameterName:
+  AllowedNames:
+    - x
+    - y
+    - x1
+    - y1
+    - x2
+    - y2
+    - id
+
+# start/stop are not predicates here — they perform actions
+Naming/PredicateMethod:
+  Exclude:
+    - test/**/*
+
+########## Style Rules
+
+Style/Documentation:
+  Enabled: false
+
+Style/ComparableClamp:
+  Enabled: false
+
+Style/OneClassPerFile:
+  Exclude:
+    - test/**/*
+
+########## Minitest Rules
+
+Minitest/MultipleAssertions:
+  Max: 10

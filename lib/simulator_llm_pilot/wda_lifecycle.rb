@@ -5,7 +5,7 @@ module SimulatorLLMPilot
   # Each instance is scoped to a specific simulator UDID and port, so
   # parallel runs on different simulators won't interfere with each other.
   class WDALifecycle
-    def initialize(port: 8100, logger:)
+    def initialize(logger:, port: 8100)
       @port = port
       @logger = logger
       @udid = nil # set on start, used for scoped pid/log paths
@@ -28,26 +28,26 @@ module SimulatorLLMPilot
           return true
         else
           raise "Port #{@port} is already in use by another WDA process. " \
-                "Use --wda-port to specify a different port for parallel runs."
+                'Use --wda-port to specify a different port for parallel runs.'
         end
       end
 
       unless File.exist?(wda_project_path)
         raise "WebDriverAgent project not found at #{wda_project_path}.\n" \
-              "Clone and build it first:\n" \
-              "  git clone https://github.com/appium/WebDriverAgent.git .build/WebDriverAgent\n" \
-              "  cd .build/WebDriverAgent && xcodebuild build-for-testing \\\n" \
-              "    -project WebDriverAgent.xcodeproj -scheme WebDriverAgentRunner \\\n" \
-              "    -destination 'platform=iOS Simulator,id=#{udid}' CODE_SIGNING_ALLOWED=NO"
+              "Clone and build it first:\n  " \
+              "git clone https://github.com/appium/WebDriverAgent.git .build/WebDriverAgent\n  " \
+              "cd .build/WebDriverAgent && xcodebuild build-for-testing \\\n    " \
+              "-project WebDriverAgent.xcodeproj -scheme WebDriverAgentRunner \\\n    " \
+              "-destination 'platform=iOS Simulator,id=#{udid}' CODE_SIGNING_ALLOWED=NO"
       end
 
       cmd = [
-        "xcodebuild", "test-without-building",
-        "-project", wda_project_path,
-        "-scheme", "WebDriverAgentRunner",
-        "-destination", "id=#{udid}",
+        'xcodebuild', 'test-without-building',
+        '-project', wda_project_path,
+        '-scheme', 'WebDriverAgentRunner',
+        '-destination', "id=#{udid}",
         "USE_PORT=#{@port}",
-        "CODE_SIGNING_ALLOWED=NO"
+        'CODE_SIGNING_ALLOWED=NO'
       ]
 
       @logger.info "Starting WDA on port #{@port} for simulator #{udid}..."
@@ -70,7 +70,7 @@ module SimulatorLLMPilot
       end
 
       begin
-        Process.kill("TERM", pid)
+        Process.kill('TERM', pid)
       rescue Errno::ESRCH
         # Already gone
       end
@@ -82,9 +82,9 @@ module SimulatorLLMPilot
 
       if @udid && File.exist?(pid_path)
         pid = File.read(pid_path).strip.to_i
-        if pid > 0
+        if pid.positive?
           begin
-            Process.kill("TERM", pid)
+            Process.kill('TERM', pid)
             @logger.info "Sent TERM to WDA process #{pid}"
             stopped = true
           rescue Errno::ESRCH
@@ -94,7 +94,7 @@ module SimulatorLLMPilot
         File.delete(pid_path)
       end
 
-      @logger.info(stopped ? "WDA stopped" : "WDA was not running")
+      @logger.info(stopped ? 'WDA stopped' : 'WDA was not running')
     end
 
     private
@@ -103,7 +103,7 @@ module SimulatorLLMPilot
       return false unless File.exist?(pid_path)
 
       pid = File.read(pid_path).strip.to_i
-      return false unless pid > 0
+      return false unless pid.positive?
 
       # Check if the process is still alive
       Process.kill(0, pid)

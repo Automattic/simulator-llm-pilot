@@ -2,11 +2,11 @@
 
 module SimulatorLLMPilot
   class TestParser
-    TestCase = Struct.new(:title, :file_path, :raw_content, :sections, keyword_init: true)
+    TestCase = Struct.new(:title, :file_path, :raw_content, :sections)
 
     def self.parse(file_path)
       content = File.read(file_path)
-      title = content.match(/^#\s+(.+)$/)&.[](1) || File.basename(file_path, ".md")
+      title = content.match(/^#\s+(.+)$/)&.[](1) || File.basename(file_path, '.md')
       sections = extract_sections(content)
 
       TestCase.new(
@@ -18,10 +18,10 @@ module SimulatorLLMPilot
     end
 
     def self.discover(path)
-      if File.file?(path) && path.end_with?(".md")
+      if File.file?(path) && path.end_with?('.md')
         [parse(path)]
       elsif File.directory?(path)
-        Dir.glob(File.join(path, "*.md")).sort.map { |f| parse(f) }
+        Dir.glob(File.join(path, '*.md')).map { |f| parse(f) }
       else
         raise "Test path not found or not a .md file: #{path}"
       end

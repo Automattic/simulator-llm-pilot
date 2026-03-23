@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require_relative "test_helper"
+require_relative 'test_helper'
 
 class WDALifecycleTest < Minitest::Test
   def setup
@@ -16,7 +16,7 @@ class WDALifecycleTest < Minitest::Test
   def test_start_reuses_own_running_process
     @lifecycle.stub(:running?, true) do
       @lifecycle.stub(:own_process_running?, true) do
-        assert @lifecycle.start(udid: "SIM-1", wda_project_path: "/tmp/ignored")
+        assert @lifecycle.start(udid: 'SIM-1', wda_project_path: '/tmp/ignored')
       end
     end
   end
@@ -25,19 +25,19 @@ class WDALifecycleTest < Minitest::Test
     @lifecycle.stub(:running?, true) do
       @lifecycle.stub(:own_process_running?, false) do
         error = assert_raises(RuntimeError) do
-          @lifecycle.start(udid: "SIM-1", wda_project_path: "/tmp/ignored")
+          @lifecycle.start(udid: 'SIM-1', wda_project_path: '/tmp/ignored')
         end
 
-        assert_includes error.message, "already in use"
+        assert_includes error.message, 'already in use'
       end
     end
   end
 
   def test_stop_only_kills_scoped_pid
-    pid_path = File.join(@dir, "wda.pid")
-    log_path = File.join(@dir, "wda.log")
-    File.write(pid_path, "1234")
-    @lifecycle.instance_variable_set(:@udid, "SIM-1")
+    pid_path = File.join(@dir, 'wda.pid')
+    log_path = File.join(@dir, 'wda.log')
+    File.write(pid_path, '1234')
+    @lifecycle.instance_variable_set(:@udid, 'SIM-1')
     @lifecycle.define_singleton_method(:pid_path) { pid_path }
     @lifecycle.define_singleton_method(:log_path) { log_path }
 
@@ -46,7 +46,7 @@ class WDALifecycleTest < Minitest::Test
       @lifecycle.stop
     end
 
-    assert_equal [["TERM", 1234]], killed
-    refute File.exist?(pid_path)
+    assert_equal [['TERM', 1234]], killed
+    refute_path_exists pid_path
   end
 end

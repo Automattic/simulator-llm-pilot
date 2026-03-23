@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require_relative "test_helper"
+require_relative 'test_helper'
 
 class TestParserTest < Minitest::Test
   def setup
@@ -12,18 +12,18 @@ class TestParserTest < Minitest::Test
   end
 
   def test_parse_extracts_title_and_section_bodies
-    path = write_test_file(@dir, "publish.md", sample_markdown)
+    path = write_test_file(@dir, 'publish.md', sample_markdown)
 
     test_case = SimulatorLLMPilot::TestParser.parse(path)
 
-    assert_equal "Publish Post", test_case.title
+    assert_equal 'Publish Post', test_case.title
     assert_equal File.expand_path(path), test_case.file_path
-    assert_equal ["Steps", "Verification", "Cleanup", "Expected Outcome"], test_case.sections.keys
-    assert_includes test_case.sections["Verification"], "Verify the post exists"
+    assert_equal ['Steps', 'Verification', 'Cleanup', 'Expected Outcome'], test_case.sections.keys
+    assert_includes test_case.sections['Verification'], 'Verify the post exists'
   end
 
   def test_expectation_helpers_ignore_empty_sections
-    path = write_test_file(@dir, "empty.md", sample_markdown(empty_verification: true))
+    path = write_test_file(@dir, 'empty.md', sample_markdown(empty_verification: true))
     test_case = SimulatorLLMPilot::TestParser.parse(path)
 
     refute SimulatorLLMPilot::TestParser.expects_verification?(test_case)
@@ -31,11 +31,11 @@ class TestParserTest < Minitest::Test
   end
 
   def test_discover_sorts_markdown_files
-    write_test_file(@dir, "b.md", sample_markdown(include_cleanup: false))
-    write_test_file(@dir, "a.md", sample_markdown(include_verification: false))
+    write_test_file(@dir, 'b.md', sample_markdown(include_cleanup: false))
+    write_test_file(@dir, 'a.md', sample_markdown(include_verification: false))
 
     files = SimulatorLLMPilot::TestParser.discover(@dir).map { |test_case| File.basename(test_case.file_path) }
 
-    assert_equal ["a.md", "b.md"], files
+    assert_equal ['a.md', 'b.md'], files
   end
 end

@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require_relative "test_helper"
+require_relative 'test_helper'
 
 class WDAClientTest < Minitest::Test
   def setup
@@ -13,7 +13,7 @@ class WDAClientTest < Minitest::Test
     http = FakeHTTPTransport.new(response: response)
 
     Net::HTTP.stub(:start, proc { |*_args, **_kwargs, &block| block.call(http) }) do
-      assert_equal "abc-123", @client.create_session
+      assert_equal 'abc-123', @client.create_session
     end
   end
 
@@ -24,7 +24,7 @@ class WDAClientTest < Minitest::Test
   end
 
   def test_invalid_session_errors_raise_infra_error
-    @client.instance_variable_set(:@session_id, "abc")
+    @client.instance_variable_set(:@session_id, 'abc')
     response = fake_response(code: 404, body: '{"value":{"error":"invalid session id","message":"expired"}}')
     http = FakeHTTPTransport.new(response: response)
 
@@ -34,33 +34,33 @@ class WDAClientTest < Minitest::Test
   end
 
   def test_non_infra_wda_errors_raise_standard_error
-    @client.instance_variable_set(:@session_id, "abc")
+    @client.instance_variable_set(:@session_id, 'abc')
     response = fake_response(code: 404, body: '{"value":{"error":"no such element","message":"missing"}}')
     http = FakeHTTPTransport.new(response: response)
 
     Net::HTTP.stub(:start, proc { |*_args, **_kwargs, &block| block.call(http) }) do
       error = assert_raises(RuntimeError) { @client.tap_at(10, 20) }
-      assert_includes error.message, "no such element"
+      assert_includes error.message, 'no such element'
     end
   end
 
   def test_get_tree_handles_string_value_payloads
-    @client.instance_variable_set(:@session_id, "abc")
+    @client.instance_variable_set(:@session_id, 'abc')
     response = fake_response(code: 200, body: '{"value":"Window tree text","sessionId":"abc"}')
     http = FakeHTTPTransport.new(response: response)
 
     Net::HTTP.stub(:start, proc { |*_args, **_kwargs, &block| block.call(http) }) do
-      assert_equal "Window tree text", @client.get_tree
+      assert_equal 'Window tree text', @client.get_tree
     end
   end
 
   def test_find_elements_handles_array_value_payloads
-    @client.instance_variable_set(:@session_id, "abc")
+    @client.instance_variable_set(:@session_id, 'abc')
     response = fake_response(code: 200, body: '{"value":[{"ELEMENT":"el-1"},{"ELEMENT":"el-2"}]}')
     http = FakeHTTPTransport.new(response: response)
 
     Net::HTTP.stub(:start, proc { |*_args, **_kwargs, &block| block.call(http) }) do
-      assert_equal [{"ELEMENT"=>"el-1"}, {"ELEMENT"=>"el-2"}], @client.find_elements(using: "xpath", value: "//Button")
+      assert_equal [{ 'ELEMENT' => 'el-1' }, { 'ELEMENT' => 'el-2' }], @client.find_elements(using: 'xpath', value: '//Button')
     end
   end
 

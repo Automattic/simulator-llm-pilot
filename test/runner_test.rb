@@ -1,14 +1,14 @@
 # frozen_string_literal: true
 
-require_relative "test_helper"
+require_relative 'test_helper'
 
 class RunnerTest < Minitest::Test
   def setup
     @dir = Dir.mktmpdir
     @config = build_config
-    @config.results_dir = File.join(@dir, "results")
+    @config.results_dir = File.join(@dir, 'results')
     @logger, = build_logger
-    @test_path = write_test_file(@dir, "publish.md", sample_markdown)
+    @test_path = write_test_file(@dir, 'publish.md', sample_markdown)
   end
 
   def teardown
@@ -26,12 +26,12 @@ class RunnerTest < Minitest::Test
       end
     end.new(
       {
-        status: "pass",
-        reason: "done",
-        model_status: "pass",
-        model_reason: "done",
+        status: 'pass',
+        reason: 'done',
+        model_status: 'pass',
+        model_reason: 'done',
         enforced_failures: [],
-        tool_usage: { "launch_app" => 1, "complete_test" => 1 },
+        tool_usage: { 'launch_app' => 1, 'complete_test' => 1 },
         verification_expected: true,
         verification_ran: true,
         verification_satisfied: true,
@@ -50,10 +50,10 @@ class RunnerTest < Minitest::Test
             SimulatorLLMPilot::Agent.stub(:new, agent) do
               results = SimulatorLLMPilot::Runner.new(config: @config, logger: @logger).run(@test_path)
 
-              assert_equal ["pass"], results.map { |result| result[:status] }
-              assert_equal 1, wda.calls.count { |call| call.first == :create_session }
-              assert File.exist?(File.join(@config.results_dir, "results.md"))
-              assert_includes File.read(File.join(@config.results_dir, "results.md")), "Verification: passed"
+              assert_equal(['pass'], results.map { |result| result[:status] })
+              assert_equal(1, wda.calls.count { |call| call.first == :create_session })
+              assert_path_exists File.join(@config.results_dir, 'results.md')
+              assert_includes File.read(File.join(@config.results_dir, 'results.md')), 'Verification: passed'
               assert_equal [:stop], lifecycle.calls.last
             end
           end
@@ -66,7 +66,7 @@ class RunnerTest < Minitest::Test
     simulator = FakeSimulator.new
     lifecycle = FakeLifecycle.new
     wda = FakeWDA.new
-    wda.fail_on(:create_session, SimulatorLLMPilot::InfraError.new("session down"))
+    wda.fail_on(:create_session, SimulatorLLMPilot::InfraError.new('session down'))
 
     SimulatorLLMPilot::Simulator.stub(:new, simulator) do
       SimulatorLLMPilot::WDALifecycle.stub(:new, lifecycle) do
@@ -74,8 +74,8 @@ class RunnerTest < Minitest::Test
           SimulatorLLMPilot::LLMClient.stub(:new, Object.new) do
             results = SimulatorLLMPilot::Runner.new(config: @config, logger: @logger).run(@test_path)
 
-            assert_equal ["infra_error"], results.map { |result| result[:status] }
-            assert_includes results.first[:reason], "Failed to create WDA session"
+            assert_equal(['infra_error'], results.map { |result| result[:status] })
+            assert_includes results.first[:reason], 'Failed to create WDA session'
           end
         end
       end

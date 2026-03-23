@@ -2,3 +2,6 @@
 results/
 .bundle/
 Gemfile.lock
+.gem-credentials
+vendor/bundle
+tmp/

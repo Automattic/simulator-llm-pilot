@@ -19,12 +19,12 @@ module SimulatorLLMPilot
     def log(level, msg)
       return unless LEVELS[level] >= LEVELS[@level]
 
-      timestamp = Time.now.strftime("%H:%M:%S")
+      timestamp = Time.now.strftime('%H:%M:%S')
       prefix = case level
-               when :debug then "[DEBUG] "
-               when :warn  then "[WARN]  "
-               when :error then "[ERROR] "
-               else ""
+               when :debug then '[DEBUG] '
+               when :warn  then '[WARN]  '
+               when :error then '[ERROR] '
+               else ''
                end
       @output.puts "[#{timestamp}] #{prefix}#{msg}"
     end

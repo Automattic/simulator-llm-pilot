@@ -14,8 +14,8 @@ module SimulatorLLMPilot
       EOFError
     ].freeze
 
-    API_URL = "https://api.anthropic.com/v1/messages"
-    API_VERSION = "2023-06-01"
+    API_URL = 'https://api.anthropic.com/v1/messages'
+    API_VERSION = '2023-06-01'
 
     def initialize(api_key:, model:, logger:)
       @api_key = api_key
@@ -35,9 +35,9 @@ module SimulatorLLMPilot
       }
 
       request = Net::HTTP::Post.new(@uri)
-      request["Content-Type"] = "application/json"
-      request["x-api-key"] = @api_key
-      request["anthropic-version"] = API_VERSION
+      request['Content-Type'] = 'application/json'
+      request['x-api-key'] = @api_key
+      request['anthropic-version'] = API_VERSION
       request.body = JSON.generate(body)
 
       response = Net::HTTP.start(@uri.hostname, @uri.port, use_ssl: true) do |http|
@@ -56,9 +56,9 @@ module SimulatorLLMPilot
       end
 
       parsed = JSON.parse(response.body)
-      usage = parsed["usage"] || {}
-      @logger.debug "LLM: #{usage["input_tokens"]}in/#{usage["output_tokens"]}out, " \
-                    "stop=#{parsed["stop_reason"]}"
+      usage = parsed['usage'] || {}
+      @logger.debug "LLM: #{usage['input_tokens']}in/#{usage['output_tokens']}out, " \
+                    "stop=#{parsed['stop_reason']}"
       parsed
     rescue *ERROR_TYPES => e
       raise LLMError, "Anthropic API request failed: #{e.message}"

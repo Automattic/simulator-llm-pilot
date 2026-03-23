@@ -1,12 +1,12 @@
 # frozen_string_literal: true
 
-require "minitest/autorun"
-require "tmpdir"
-require "fileutils"
-require "stringio"
+require 'minitest/autorun'
+require 'tmpdir'
+require 'fileutils'
+require 'stringio'
 
-$LOAD_PATH.unshift(File.expand_path("../lib", __dir__))
-require "simulator_llm_pilot"
+$LOAD_PATH.unshift(File.expand_path('../lib', __dir__))
+require 'simulator_llm_pilot'
 
 class Object
   def stub(method_name, replacement)
@@ -25,10 +25,18 @@ class Object
 
     yield
   ensure
-    singleton.send(:remove_method, method_name) rescue nil
+    begin
+      singleton.send(:remove_method, method_name)
+    rescue StandardError
+      nil
+    end
     if had_method
       singleton.alias_method(method_name, backup)
-      singleton.send(:remove_method, backup) rescue nil
+      begin
+        singleton.send(:remove_method, backup)
+      rescue StandardError
+        nil
+      end
     end
   end
 end
@@ -58,7 +66,7 @@ module SimulatorLLMPilotTestHelpers
 
     def initialize
       @tree = "Element subtree:\nAttributes: Window"
-      @session_id = "session-123"
+      @session_id = 'session-123'
       @calls = []
       @failures = {}
       @find_element_result = nil
@@ -68,9 +76,7 @@ module SimulatorLLMPilotTestHelpers
       @failures[method_name] = error
     end
 
-    def find_element_result=(value)
-      @find_element_result = value
-    end
+    attr_writer :find_element_result
 
     def create_session
       maybe_raise(:create_session)
@@ -128,7 +134,7 @@ module SimulatorLLMPilotTestHelpers
     attr_reader :calls
 
     def initialize
-      @booted_device_result = { udid: "SIM-1", name: "iPhone 16" }
+      @booted_device_result = { udid: 'SIM-1', name: 'iPhone 16' }
       @calls = []
       @failures = {}
     end
@@ -146,7 +152,7 @@ module SimulatorLLMPilotTestHelpers
     def launch_app(udid, bundle_id, args:)
       maybe_raise(:launch_app)
       @calls << [:launch_app, udid, bundle_id, args]
-      "launched"
+      'launched'
     end
 
     def terminate_app(udid, bundle_id)
@@ -185,7 +191,7 @@ module SimulatorLLMPilotTestHelpers
     def create_message(**kwargs)
       @calls << kwargs
       raise @error if @error
-      raise "No response queued" if @responses.empty?
+      raise 'No response queued' if @responses.empty?
 
       @responses.shift
     end
@@ -209,12 +215,12 @@ module SimulatorLLMPilotTestHelpers
     def execute(tool_name, input)
       @tool_usage[tool_name] += 1
 
-      if tool_name == "complete_test"
+      if tool_name == 'complete_test'
         @test_completed = true
-        @test_status = input["status"]
-        @test_reason = input["reason"]
-      elsif tool_name == "rest_api_call"
-        purpose = input["purpose"]
+        @test_status = input['status']
+        @test_reason = input['reason']
+      elsif tool_name == 'rest_api_call'
+        purpose = input['purpose']
         @rest_calls[purpose][:called] = true
         @rest_calls[purpose][:satisfied] = true
       end
@@ -238,9 +244,7 @@ module SimulatorLLMPilotTestHelpers
     def apply_outcome(outcome, tool_name)
       return default_result(tool_name) if outcome.nil?
 
-      if outcome.respond_to?(:call)
-        return outcome.call(tool_name, self)
-      end
+      return outcome.call(tool_name, self) if outcome.respond_to?(:call)
 
       if outcome.is_a?(Hash)
         @total_infra_errors = outcome[:total_infra_errors] if outcome.key?(:total_infra_errors)
@@ -257,7 +261,7 @@ module SimulatorLLMPilotTestHelpers
     end
 
     def default_result(tool_name)
-      tool_name == "complete_test" ? "complete" : "ok"
+      tool_name == 'complete_test' ? 'complete' : 'ok'
     end
   end
 
@@ -289,19 +293,19 @@ module SimulatorLLMPilotTestHelpers
 
   def build_config
     config = SimulatorLLMPilot::Config.new
-    config.anthropic_api_key = "anthropic-key"
-    config.app_bundle_id = "org.wordpress"
-    config.site_url = "https://example.test"
-    config.username = "ian"
-    config.app_password = "secret"
-    config.simulator_udid = "SIM-1"
+    config.anthropic_api_key = 'anthropic-key'
+    config.app_bundle_id = 'org.wordpress'
+    config.site_url = 'https://example.test'
+    config.username = 'ian'
+    config.app_password = 'secret'
+    config.simulator_udid = 'SIM-1'
     config
   end
 
   def sample_markdown(include_verification: true, include_cleanup: true, empty_verification: false)
-    verification_body = empty_verification ? "" : "- Verify the post exists.\n"
-    cleanup = include_cleanup ? "## Cleanup\n- Delete the post.\n\n" : ""
-    verification = include_verification ? "## Verification\n#{verification_body}\n" : ""
+    verification_body = empty_verification ? '' : "- Verify the post exists.\n"
+    cleanup = include_cleanup ? "## Cleanup\n- Delete the post.\n\n" : ''
+    verification = include_verification ? "## Verification\n#{verification_body}\n" : ''
 
     <<~MARKDOWN
       # Publish Post
@@ -322,8 +326,8 @@ module SimulatorLLMPilotTestHelpers
     path
   end
 
-  def tool_use(name:, input:, id: "tool-1")
-    { "type" => "tool_use", "id" => id, "name" => name, "input" => input }
+  def tool_use(name:, input:, id: 'tool-1')
+    { 'type' => 'tool_use', 'id' => id, 'name' => name, 'input' => input }
   end
 
   def fake_response(code:, body:)
@@ -339,7 +343,7 @@ module SimulatorLLMPilotTestHelpers
   def with_env(values)
     previous = {}
     values.each do |key, value|
-      previous[key] = ENV[key]
+      previous[key] = ENV.fetch(key, nil)
       value.nil? ? ENV.delete(key) : ENV[key] = value
     end
     yield
@@ -350,6 +354,8 @@ module SimulatorLLMPilotTestHelpers
   end
 end
 
-class Minitest::Test
-  include SimulatorLLMPilotTestHelpers
+module Minitest
+  class Test
+    include SimulatorLLMPilotTestHelpers
+  end
 end
