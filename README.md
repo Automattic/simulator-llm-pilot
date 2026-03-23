@@ -206,6 +206,7 @@ lib/sim_pilot/
 ├── agent.rb             # Core loop: LLM <-> tool executor
 ├── cli.rb               # Command-line interface
 ├── config.rb            # Configuration and validation
+├── errors.rb            # InfraError and LLMError exception classes
 ├── llm_client.rb        # Anthropic Messages API (stdlib net/http)
 ├── logger.rb            # Structured timestamped logging
 ├── runner.rb            # Orchestration: WDA lifecycle, test loop, results

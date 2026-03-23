@@ -40,6 +40,7 @@ module SimPilot
     # Returns the accessibility tree as text (format=description, ~25KB)
     # or as a parsed hash (format=json, ~375KB).
     def get_tree(format: :description)
+      ensure_session!
       response = get("/source?format=#{format}")
       response["value"]
     end

@@ -70,11 +70,14 @@ module SimPilot
 
     def rest_api_called?(purpose = nil)
       return @tool_usage["rest_api_call"] > 0 if purpose.nil?
+      return false unless @rest_api_usage.key?(purpose)
 
       @rest_api_usage[purpose][:calls] > 0
     end
 
     def rest_api_satisfied?(purpose)
+      return false unless @rest_api_usage.key?(purpose)
+
       usage = @rest_api_usage[purpose]
       usage[:calls] > 0 && usage[:last_success]
     end
@@ -228,9 +231,16 @@ module SimPilot
     end
 
     def validate_rest_api_path!(path)
+      decoded = URI::RFC2396_PARSER.unescape(path.to_s)
+      raise "REST API path must not contain '..'" if decoded.include?("..")
+
       allowed = @config.rest_api_allowed_prefix
       return if allowed.nil? || allowed.empty?
-      return if path.start_with?(allowed)
+
+      normalized = File.expand_path(decoded, "/")
+      normalized_prefix = File.expand_path(allowed, "/")
+
+      return if normalized == normalized_prefix || normalized.start_with?("#{normalized_prefix}/")
 
       raise "REST API path '#{path}' is not allowed. " \
             "Only paths starting with '#{allowed}' are permitted."

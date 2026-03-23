@@ -22,16 +22,18 @@ class ConfigTest < Minitest::Test
   end
 
   def test_validate_reports_missing_and_invalid_values
-    config = SimPilot::Config.new
-    config.wda_port = 0
-    config.max_turns_per_test = 0
-    config.test_timeout = 0
-    config.max_context_turns = -1
+    with_env("ANTHROPIC_API_KEY" => nil) do
+      config = SimPilot::Config.new
+      config.wda_port = 0
+      config.max_turns_per_test = 0
+      config.test_timeout = 0
+      config.max_context_turns = -1
 
-    error = assert_raises(ArgumentError) { config.validate! }
+      error = assert_raises(ArgumentError) { config.validate! }
 
-    assert_includes error.message, "ANTHROPIC_API_KEY env var is required"
-    assert_includes error.message, "--wda-port must be a positive integer"
-    assert_includes error.message, "--max-context-turns must be zero or greater"
+      assert_includes error.message, "ANTHROPIC_API_KEY env var is required"
+      assert_includes error.message, "--wda-port must be a positive integer"
+      assert_includes error.message, "--max-context-turns must be zero or greater"
+    end
   end
 end

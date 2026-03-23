@@ -55,6 +55,25 @@ class ToolExecutorTest < Minitest::Test
     refute @executor.rest_api_satisfied?("cleanup")
   end
 
+  def test_rest_api_rejects_path_traversal
+    [
+      "/wp-json/../wp-login.php",
+      "/wp-json/../../etc/passwd",
+      "/wp-json/wp/v2/../../../secret",
+      "/wp-json/%2e%2e/wp-login.php",
+      "/wp-json/%2E%2E/%2E%2E/etc/passwd",
+      "/wp-json/wp/v2/%2e%2e%2f%2e%2e%2fsecret"
+    ].each do |path|
+      result = @executor.execute("rest_api_call", {
+        "purpose" => "setup",
+        "method" => "GET",
+        "path" => path
+      })
+
+      assert_match(/\AError:.*\.\./, result, "Expected path traversal rejection for: #{path}")
+    end
+  end
+
   def test_infra_errors_increment_and_reset_consecutive_count
     @wda.tree = nil
 

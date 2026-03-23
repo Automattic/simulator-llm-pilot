@@ -222,22 +222,22 @@ module SimPilot
       failures = []
 
       if verification_expected
-        failures << if !verification_ran
-                      "verification section was declared but no verification REST call was made"
-                    elsif !verification_satisfied
-                      "verification REST calls did not complete successfully"
-                    end
+        if !verification_ran
+          failures << "verification section was declared but no verification REST call was made"
+        elsif !verification_satisfied
+          failures << "verification REST calls did not complete successfully"
+        end
       end
 
       if cleanup_expected
-        failures << if !cleanup_ran
-                      "cleanup section was declared but no cleanup REST call was made"
-                    elsif !cleanup_satisfied
-                      "cleanup REST calls did not complete successfully"
-                    end
+        if !cleanup_ran
+          failures << "cleanup section was declared but no cleanup REST call was made"
+        elsif !cleanup_satisfied
+          failures << "cleanup REST calls did not complete successfully"
+        end
       end
 
-      failures.compact
+      failures
     end
 
     def enforce_result(model_status, model_reason, enforced_failures)
