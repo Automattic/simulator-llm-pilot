@@ -1,10 +1,16 @@
 # frozen_string_literal: true
 
 module SimPilot
+  # Raised for infrastructure-level failures (WDA down, simulator crash, etc.)
+  # as distinct from test-level failures (element not found, wrong screen).
+  class InfraError < StandardError; end
+
   # Executes tool calls from the LLM against the actual simulator/WDA/REST API.
   # This is the enforcement layer — only these operations are possible.
+  # Tracks tool usage by category for verification observability.
   class ToolExecutor
-    attr_reader :test_completed, :test_status, :test_reason
+    attr_reader :test_completed, :test_status, :test_reason,
+                :infra_error_count, :tool_usage
 
     def initialize(wda:, simulator:, config:, logger:)
       @wda = wda
@@ -15,9 +21,12 @@ module SimPilot
       @test_status = nil
       @test_reason = nil
       @screenshot_count = 0
+      @infra_error_count = 0
+      @tool_usage = Hash.new(0) # tracks call count per tool name
     end
 
     def execute(tool_name, input)
+      @tool_usage[tool_name] += 1
       @logger.debug "Tool call: #{tool_name}(#{truncate(input.to_json, 200)})"
 
       result = case tool_name
@@ -37,16 +46,33 @@ module SimPilot
 
       @logger.debug "Tool result: #{truncate(result.to_s, 300)}"
       result
+    rescue Errno::ECONNREFUSED, Errno::ECONNRESET, Errno::ETIMEDOUT => e
+      @infra_error_count += 1
+      msg = "INFRASTRUCTURE ERROR: #{e.message}. WDA or simulator may be down."
+      @logger.error msg
+      msg
+    rescue InfraError => e
+      @infra_error_count += 1
+      msg = "INFRASTRUCTURE ERROR: #{e.message}"
+      @logger.error msg
+      msg
     rescue StandardError => e
       @logger.error "Tool #{tool_name} error: #{e.message}"
       "Error: #{e.message}"
+    end
+
+    # Whether rest_api_call was ever invoked (for verification observability)
+    def rest_api_called?
+      @tool_usage["rest_api_call"] > 0
     end
 
     private
 
     def exec_get_tree
       tree = @wda.get_tree(format: :description)
-      return "Error: empty accessibility tree. WDA session may have expired." if tree.nil? || tree.empty?
+      if tree.nil? || tree.empty?
+        raise InfraError, "Empty accessibility tree — WDA session may have expired"
+      end
 
       tree
     end
@@ -136,6 +162,8 @@ module SimPilot
       body = input["body"]
       query = input["query"]
 
+      validate_rest_api_path!(path)
+
       uri = URI("#{@config.site_url}#{path}")
       if query
         params = URI.encode_www_form(query)
@@ -177,6 +205,15 @@ module SimPilot
       @test_reason = input["reason"]
       @logger.info "  Test result: #{@test_status.upcase} — #{@test_reason}"
       "Test marked as #{@test_status}: #{@test_reason}"
+    end
+
+    def validate_rest_api_path!(path)
+      allowed = @config.rest_api_allowed_prefix
+      return if allowed.nil? || allowed.empty?
+      return if path.start_with?(allowed)
+
+      raise "REST API path '#{path}' is not allowed. " \
+            "Only paths starting with '#{allowed}' are permitted."
     end
 
     def build_http_request(method, uri)

@@ -4,6 +4,11 @@ module SimPilot
   # The core agent loop for a single test case.
   # Sends the test context to the LLM, receives tool calls, executes them,
   # and repeats until the test is complete or limits are hit.
+  #
+  # Hardening:
+  # - Compresses old accessibility trees to manage context/cost (#4)
+  # - Tracks consecutive infra errors and aborts early (#6)
+  # - Reports verification observability metadata (#2)
   class Agent
     SYSTEM_PROMPT = <<~PROMPT
       You are an iOS app test executor. You navigate a WordPress or Jetpack iOS app
@@ -55,7 +60,11 @@ module SimPilot
       - If stuck after 5 retries on the same step, mark the test as failed.
       - ALWAYS call complete_test exactly once when done, whether pass or fail.
       - Keep your text responses minimal — focus on tool calls, not explanations.
+      - If the test has a Verification section, you MUST call rest_api_call for it.
+      - If the test has a Cleanup section, you MUST call rest_api_call for it.
     PROMPT
+
+    MAX_CONSECUTIVE_INFRA_ERRORS = 3
 
     def initialize(test_case:, config:, wda:, simulator:, llm:, logger:)
       @test_case = test_case
@@ -97,14 +106,17 @@ module SimPilot
 
         if @turn_count > @config.max_turns_per_test
           @logger.warn "Max turns (#{@config.max_turns_per_test}) exceeded"
-          return result("fail", "Exceeded maximum tool call turns (#{@config.max_turns_per_test})")
+          return build_result("fail", "Exceeded maximum tool call turns (#{@config.max_turns_per_test})")
         end
 
         elapsed = Time.now - start_time
         if elapsed > @config.test_timeout
           @logger.warn "Timeout (#{@config.test_timeout}s) exceeded"
-          return result("fail", "Test timed out after #{elapsed.round}s")
+          return build_result("fail", "Test timed out after #{elapsed.round}s")
         end
+
+        # Compress old accessibility trees before sending to manage context size
+        compress_old_trees!
 
         response = @llm.create_message(
           system: SYSTEM_PROMPT,
@@ -126,7 +138,6 @@ module SimPilot
         tool_uses = assistant_content.select { |b| b["type"] == "tool_use" }
 
         if tool_uses.empty?
-          # Model stopped without tool calls
           return if_completed_or_fail("LLM stopped without calling complete_test")
         end
 
@@ -142,7 +153,15 @@ module SimPilot
 
         @messages << { role: "user", content: tool_results }
 
-        # Check if any tool call completed the test
+        # Check for consecutive infrastructure errors — abort early
+        if @executor.infra_error_count >= MAX_CONSECUTIVE_INFRA_ERRORS
+          @logger.error "Aborting: #{@executor.infra_error_count} infrastructure errors"
+          return build_result("infra_error",
+                              "Aborted after #{@executor.infra_error_count} infrastructure errors — " \
+                              "WDA or simulator may be down")
+        end
+
+        # Check if test was completed by a tool call
         return if_completed_or_fail(nil) if @executor.test_completed
       end
     end
@@ -151,14 +170,56 @@ module SimPilot
 
     def if_completed_or_fail(fallback_reason)
       if @executor.test_completed
-        result(@executor.test_status, @executor.test_reason)
+        build_result(@executor.test_status, @executor.test_reason)
       else
-        result("fail", fallback_reason)
+        build_result("fail", fallback_reason)
       end
     end
 
-    def result(status, reason)
-      { status: status, reason: reason }
+    def build_result(status, reason)
+      {
+        status: status,
+        reason: reason,
+        tool_usage: @executor.tool_usage.dup,
+        verification_ran: @executor.rest_api_called?,
+        verification_expected: TestParser.expects_verification?(@test_case),
+        cleanup_expected: TestParser.expects_cleanup?(@test_case),
+        turns: @turn_count,
+        infra_errors: @executor.infra_error_count
+      }
+    end
+
+    # Compress accessibility tree content in older tool results to manage
+    # context window size and reduce token cost. Keeps the most recent
+    # trees intact so the model can still reference the current UI state.
+    def compress_old_trees!
+      preserve_recent = @config.max_context_turns * 2 # each turn = 2 messages
+      cutoff = @messages.length - preserve_recent
+
+      return if cutoff <= 1 # nothing old enough to compress
+
+      (1...cutoff).each do |i|
+        msg = @messages[i]
+        next unless msg[:role] == "user"
+
+        content = msg[:content]
+        next unless content.is_a?(Array)
+
+        content.each do |block|
+          next unless block[:type] == "tool_result"
+          next unless block[:content].is_a?(String)
+
+          text = block[:content]
+          next unless text.length > 500 && accessibility_tree?(text)
+
+          line_count = text.lines.size
+          block[:content] = "[Accessibility tree — #{line_count} lines, compressed to save context]"
+        end
+      end
+    end
+
+    def accessibility_tree?(text)
+      text.include?("Element subtree:") || text.match?(/\AAttributes: Window/)
     end
   end
 end

@@ -98,6 +98,14 @@ module SimPilot
           @config.test_timeout = v
         end
 
+        opts.on("--max-context-turns N", Integer, "Compress trees older than N turns (default: 20)") do |v|
+          @config.max_context_turns = v
+        end
+
+        opts.on("--rest-api-prefix PREFIX", "Allowed REST API path prefix (default: /wp-json/)") do |v|
+          @config.rest_api_allowed_prefix = v
+        end
+
         opts.on("--debug", "Enable debug logging") do
           @log_level = :debug
         end
@@ -129,8 +137,8 @@ module SimPilot
       runner = Runner.new(config: @config, logger: logger)
       results = runner.run(@test_path)
 
-      failed = results.count { |r| r[:status] == "fail" }
-      exit(failed > 0 ? 1 : 0)
+      any_failure = results.any? { |r| r[:status] != "pass" }
+      exit(any_failure ? 1 : 0)
     end
 
     def print_help

@@ -7,13 +7,16 @@ module SimPilot
                   :wda_port, :wda_project_path,
                   :results_dir, :screenshots_dir,
                   :anthropic_api_key, :anthropic_model,
-                  :max_turns_per_test, :test_timeout
+                  :max_turns_per_test, :test_timeout,
+                  :max_context_turns, :rest_api_allowed_prefix
 
     def initialize
       @wda_port = 8100
       @anthropic_model = "claude-sonnet-4-20250514"
       @max_turns_per_test = 100
       @test_timeout = 600 # 10 minutes per test
+      @max_context_turns = 20 # compress accessibility trees older than this many turns
+      @rest_api_allowed_prefix = "/wp-json/" # only allow WP REST API paths
       @anthropic_api_key = ENV["ANTHROPIC_API_KEY"]
       @site_url = ENV["SIM_PILOT_SITE_URL"]
       @username = ENV["SIM_PILOT_USERNAME"]

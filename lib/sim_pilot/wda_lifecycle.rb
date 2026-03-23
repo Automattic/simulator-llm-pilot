@@ -2,11 +2,13 @@
 
 module SimPilot
   # Manages starting and stopping the WebDriverAgent xcodebuild process.
-  # Adapted from the WordPress-iOS ios-sim-navigation skill scripts.
+  # Each instance is scoped to a specific simulator UDID and port, so
+  # parallel runs on different simulators won't interfere with each other.
   class WDALifecycle
     def initialize(port: 8100, logger:)
       @port = port
       @logger = logger
+      @udid = nil # set on start, used for scoped pid/log paths
     end
 
     def running?
@@ -18,9 +20,16 @@ module SimPilot
     end
 
     def start(udid:, wda_project_path:, max_wait: 120)
+      @udid = udid
+
       if running?
-        @logger.info "WDA already running on port #{@port}"
-        return true
+        if own_process_running?
+          @logger.info "WDA already running on port #{@port} for #{udid}"
+          return true
+        else
+          raise "Port #{@port} is already in use by another WDA process. " \
+                "Use --wda-port to specify a different port for parallel runs."
+        end
       end
 
       unless File.exist?(wda_project_path)
@@ -41,9 +50,6 @@ module SimPilot
         "CODE_SIGNING_ALLOWED=NO"
       ]
 
-      log_path = "/tmp/wda-#{@port}.log"
-      pid_path = "/tmp/wda-#{@port}.pid"
-
       @logger.info "Starting WDA on port #{@port} for simulator #{udid}..."
       @logger.info "WDA log: #{log_path}"
 
@@ -63,7 +69,6 @@ module SimPilot
         end
       end
 
-      # Failed — kill the process
       begin
         Process.kill("TERM", pid)
       rescue Errno::ESRCH
@@ -73,10 +78,9 @@ module SimPilot
     end
 
     def stop
-      pid_path = "/tmp/wda-#{@port}.pid"
       stopped = false
 
-      if File.exist?(pid_path)
+      if @udid && File.exist?(pid_path)
         pid = File.read(pid_path).strip.to_i
         if pid > 0
           begin
@@ -90,21 +94,30 @@ module SimPilot
         File.delete(pid_path)
       end
 
-      # Also kill any lingering xcodebuild WDA processes
-      pids = `pgrep -f "xcodebuild.*WebDriverAgent" 2>/dev/null`.strip.split("\n").map(&:to_i)
-      pids.each do |p|
-        next if p <= 0
-
-        begin
-          Process.kill("TERM", p)
-          @logger.info "Killed xcodebuild WDA process #{p}"
-          stopped = true
-        rescue Errno::ESRCH
-          # Already gone
-        end
-      end
-
       @logger.info(stopped ? "WDA stopped" : "WDA was not running")
+    end
+
+    private
+
+    def own_process_running?
+      return false unless File.exist?(pid_path)
+
+      pid = File.read(pid_path).strip.to_i
+      return false unless pid > 0
+
+      # Check if the process is still alive
+      Process.kill(0, pid)
+      true
+    rescue Errno::ESRCH, Errno::EPERM
+      false
+    end
+
+    def pid_path
+      "/tmp/wda-#{@udid}-#{@port}.pid"
+    end
+
+    def log_path
+      "/tmp/wda-#{@udid}-#{@port}.log"
     end
   end
 end

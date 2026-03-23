@@ -5,8 +5,8 @@ module SimPilot
   # 1. Discover tests
   # 2. Resolve simulator
   # 3. Start WDA
-  # 4. Run each test via Agent
-  # 5. Write results
+  # 4. Run each test via Agent (with runner-level state reset between tests)
+  # 5. Write results with verification observability metadata
   # 6. Stop WDA
   class Runner
     def initialize(config:, logger:)
@@ -56,6 +56,10 @@ module SimPilot
         @logger.info "[#{index + 1}/#{test_cases.length}] #{test_case.title}"
         @logger.info "=" * 60
 
+        # Runner-level clean state: terminate app before each test
+        # This is infrastructure-enforced, not agent-controlled
+        reset_app_state!
+
         agent = Agent.new(
           test_case: test_case,
           config: @config,
@@ -70,15 +74,41 @@ module SimPilot
         result[:file] = test_case.file_path
         results << result
 
-        icon = result[:status] == "pass" ? "PASS" : "FAIL"
-        @logger.info "[#{icon}] #{test_case.title}"
-        @logger.info "  #{result[:reason]}"
+        log_result(result)
 
-        # Recreate WDA session between tests for clean state
+        # Recreate WDA session between tests
         recreate_session(wda)
       end
 
       results
+    end
+
+    def reset_app_state!
+      @simulator.terminate_app(@config.simulator_udid, @config.app_bundle_id)
+      @logger.debug "Terminated app for clean state"
+    rescue StandardError => e
+      @logger.debug "App terminate (pre-test reset): #{e.message}"
+    end
+
+    def log_result(result)
+      status = result[:status]
+      icon = case status
+             when "pass" then "PASS"
+             when "infra_error" then "INFRA"
+             else "FAIL"
+             end
+
+      @logger.info "[#{icon}] #{result[:test]}"
+      @logger.info "  #{result[:reason]}"
+
+      # Verification observability warnings
+      if result[:verification_expected] && !result[:verification_ran]
+        @logger.warn "  Test has a Verification section but rest_api_call was never invoked"
+      end
+
+      if result[:status] == "pass" && result[:verification_expected] && !result[:verification_ran]
+        @logger.warn "  SUSPICIOUS PASS: test passed without running verification"
+      end
     end
 
     def recreate_session(wda)
@@ -140,20 +170,33 @@ module SimPilot
     def write_results(results)
       passed = results.count { |r| r[:status] == "pass" }
       failed = results.count { |r| r[:status] == "fail" }
+      infra = results.count { |r| r[:status] == "infra_error" }
 
       lines = [
         "# Test Results\n",
         "- **Date:** #{Time.now.strftime("%Y-%m-%d %H:%M")}",
         "- **Site:** #{@config.site_url}",
         "- **Model:** #{@config.anthropic_model}",
-        "- **Total:** #{results.length} | **Passed:** #{passed} | **Failed:** #{failed}\n",
+        "- **Total:** #{results.length} | **Passed:** #{passed} | **Failed:** #{failed}" \
+          "#{" | **Infra errors:** #{infra}" if infra > 0}\n",
         "## Results\n"
       ]
 
       results.each do |r|
-        status_label = r[:status] == "pass" ? "PASS" : "FAIL"
+        status_label = case r[:status]
+                       when "pass" then "PASS"
+                       when "infra_error" then "INFRA_ERROR"
+                       else "FAIL"
+                       end
         lines << "### #{status_label} #{r[:test]}"
         lines << r[:reason].to_s
+
+        # Verification observability
+        if r[:verification_expected] && !r[:verification_ran]
+          lines << "**Warning:** Verification section exists but `rest_api_call` was not invoked."
+        end
+
+        lines << "Turns: #{r[:turns]} | Tools: #{r[:tool_usage]&.map { |k, v| "#{k}(#{v})" }&.join(", ")}"
         lines << ""
       end
 
@@ -165,10 +208,15 @@ module SimPilot
     def print_summary(results)
       passed = results.count { |r| r[:status] == "pass" }
       failed = results.count { |r| r[:status] == "fail" }
+      infra = results.count { |r| r[:status] == "infra_error" }
+      suspicious = results.count { |r| r[:status] == "pass" && r[:verification_expected] && !r[:verification_ran] }
 
       @logger.info ""
       @logger.info "=" * 60
-      @logger.info "DONE — Total: #{results.length} | Passed: #{passed} | Failed: #{failed}"
+      summary = "DONE — Total: #{results.length} | Passed: #{passed} | Failed: #{failed}"
+      summary += " | Infra errors: #{infra}" if infra > 0
+      @logger.info summary
+      @logger.warn "#{suspicious} test(s) passed without running expected verification" if suspicious > 0
       @logger.info "Results: #{@config.results_dir}"
       @logger.info "=" * 60
     end
