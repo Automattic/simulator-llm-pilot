@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module SimPilot
+module SimulatorLLMPilot
   class Config
     attr_accessor :app_bundle_id, :site_url, :username, :app_password,
                   :simulator_udid, :simulator_name,
@@ -18,18 +18,18 @@ module SimPilot
       @max_context_turns = 20 # compress accessibility trees older than this many turns
       @rest_api_allowed_prefix = "/wp-json/" # only allow WP REST API paths
       @anthropic_api_key = ENV["ANTHROPIC_API_KEY"]
-      @site_url = ENV["SIM_PILOT_SITE_URL"]
-      @username = ENV["SIM_PILOT_USERNAME"]
-      @app_password = ENV["SIM_PILOT_APP_PASSWORD"]
+      @site_url = ENV["SIMULATOR_LLM_PILOT_SITE_URL"]
+      @username = ENV["SIMULATOR_LLM_PILOT_USERNAME"]
+      @app_password = ENV["SIMULATOR_LLM_PILOT_APP_PASSWORD"]
     end
 
     def validate!
       errors = []
       errors << "ANTHROPIC_API_KEY env var is required" if blank?(@anthropic_api_key)
       errors << "--app-bundle-id is required" if blank?(@app_bundle_id)
-      errors << "--site-url is required (or set SIM_PILOT_SITE_URL)" if blank?(@site_url)
-      errors << "--username is required (or set SIM_PILOT_USERNAME)" if blank?(@username)
-      errors << "--app-password is required (or set SIM_PILOT_APP_PASSWORD)" if blank?(@app_password)
+      errors << "--site-url is required (or set SIMULATOR_LLM_PILOT_SITE_URL)" if blank?(@site_url)
+      errors << "--username is required (or set SIMULATOR_LLM_PILOT_USERNAME)" if blank?(@username)
+      errors << "--app-password is required (or set SIMULATOR_LLM_PILOT_APP_PASSWORD)" if blank?(@app_password)
       errors << "--wda-port must be a positive integer" unless positive_integer?(@wda_port)
       errors << "--max-turns must be a positive integer" unless positive_integer?(@max_turns_per_test)
       errors << "--timeout must be a positive integer" unless positive_integer?(@test_timeout)

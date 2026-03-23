@@ -6,12 +6,12 @@ require "fileutils"
 require "stringio"
 
 $LOAD_PATH.unshift(File.expand_path("../lib", __dir__))
-require "sim_pilot"
+require "simulator_llm_pilot"
 
 class Object
   def stub(method_name, replacement)
     singleton = class << self; self; end
-    backup = :"__sim_pilot_stub__#{method_name}__#{object_id}"
+    backup = :"__simulator_llm_pilot_stub__#{method_name}__#{object_id}"
     had_method = respond_to?(method_name, true)
 
     singleton.alias_method(backup, method_name) if had_method
@@ -33,7 +33,7 @@ class Object
   end
 end
 
-module SimPilotTestHelpers
+module SimulatorLLMPilotTestHelpers
   FakeResponse = Struct.new(:code, :body)
 
   class FakeHTTPTransport
@@ -284,11 +284,11 @@ module SimPilotTestHelpers
 
   def build_logger(level: :debug)
     io = StringIO.new
-    [SimPilot::Logger.new(level: level, output: io), io]
+    [SimulatorLLMPilot::Logger.new(level: level, output: io), io]
   end
 
   def build_config
-    config = SimPilot::Config.new
+    config = SimulatorLLMPilot::Config.new
     config.anthropic_api_key = "anthropic-key"
     config.app_bundle_id = "org.wordpress"
     config.site_url = "https://example.test"
@@ -351,5 +351,5 @@ module SimPilotTestHelpers
 end
 
 class Minitest::Test
-  include SimPilotTestHelpers
+  include SimulatorLLMPilotTestHelpers
 end

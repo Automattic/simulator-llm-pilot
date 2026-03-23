@@ -6,11 +6,11 @@ class ConfigTest < Minitest::Test
   def test_initialize_loads_environment_defaults
     with_env(
       "ANTHROPIC_API_KEY" => "key-123",
-      "SIM_PILOT_SITE_URL" => "https://wp.test",
-      "SIM_PILOT_USERNAME" => "ian",
-      "SIM_PILOT_APP_PASSWORD" => "secret"
+      "SIMULATOR_LLM_PILOT_SITE_URL" => "https://wp.test",
+      "SIMULATOR_LLM_PILOT_USERNAME" => "ian",
+      "SIMULATOR_LLM_PILOT_APP_PASSWORD" => "secret"
     ) do
-      config = SimPilot::Config.new
+      config = SimulatorLLMPilot::Config.new
 
       assert_equal "key-123", config.anthropic_api_key
       assert_equal "https://wp.test", config.site_url
@@ -23,7 +23,7 @@ class ConfigTest < Minitest::Test
 
   def test_validate_reports_missing_and_invalid_values
     with_env("ANTHROPIC_API_KEY" => nil) do
-      config = SimPilot::Config.new
+      config = SimulatorLLMPilot::Config.new
       config.wda_port = 0
       config.max_turns_per_test = 0
       config.test_timeout = 0

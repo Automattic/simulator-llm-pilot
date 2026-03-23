@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module SimPilot
+module SimulatorLLMPilot
   # Executes tool calls from the LLM against the actual simulator/WDA/REST API.
   # This is the enforcement layer — only these operations are possible.
   class ToolExecutor

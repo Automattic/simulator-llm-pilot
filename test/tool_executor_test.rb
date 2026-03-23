@@ -8,7 +8,7 @@ class ToolExecutorTest < Minitest::Test
     @logger, = build_logger
     @wda = FakeWDA.new
     @simulator = FakeSimulator.new
-    @executor = SimPilot::ToolExecutor.new(
+    @executor = SimulatorLLMPilot::ToolExecutor.new(
       wda: @wda,
       simulator: @simulator,
       config: @config,

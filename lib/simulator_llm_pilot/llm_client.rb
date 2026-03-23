@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module SimPilot
+module SimulatorLLMPilot
   # Minimal Anthropic Messages API client with tool use support.
   # Uses only net/http from stdlib — no external dependencies.
   class LLMClient

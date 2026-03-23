@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module SimPilot
+module SimulatorLLMPilot
   # HTTP client for WebDriverAgent running on a simulator.
   # All UI interactions (tap, swipe, type, read tree) go through this client.
   class WDAClient
@@ -163,8 +163,9 @@ module SimPilot
 
     def parse_response(method, path, response)
       parsed = JSON.parse(response.body)
-      error_type = parsed.dig("value", "error") || parsed["error"]
-      error_message = parsed.dig("value", "message") || parsed["message"]
+      error_source = error_metadata_source(parsed)
+      error_type = error_source&.[]("error")
+      error_message = error_source&.[]("message")
 
       if response.code.to_i >= 500
         raise InfraError, "WDA #{method} #{path} failed (HTTP #{response.code}): #{error_message || response.body}"
@@ -187,6 +188,15 @@ module SimPilot
 
     def infra_session_error?(error_type)
       %w[invalid\ session\ id session\ not\ created].include?(error_type)
+    end
+
+    def error_metadata_source(parsed)
+      return parsed unless parsed.is_a?(Hash)
+
+      value = parsed["value"]
+      return value if value.is_a?(Hash)
+
+      parsed
     end
   end
 end

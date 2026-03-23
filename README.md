@@ -1,4 +1,4 @@
-# sim_pilot
+# simulator-llm-pilot
 
 AI-driven iOS end-to-end test runner. Executes test cases written as plain-language markdown files against a WordPress or Jetpack iOS app in a simulator, using an LLM to navigate the UI through a sandboxed set of tools.
 
@@ -6,13 +6,13 @@ AI-driven iOS end-to-end test runner. Executes test cases written as plain-langu
 
 Traditional XCUITest-based UI tests are brittle and expensive to maintain. When they break, they tend to stay broken for weeks while PRs keep merging against a red CI. The AI-driven approach replaces rigid, coordinate-coupled test code with natural-language test cases that an LLM interprets and executes at runtime.
 
-The key problem with running an LLM CLI (like Claude Code) directly in CI is that it requires broad permissions — arbitrary shell commands, network access, filesystem writes — which is a security and reliability risk. **sim_pilot solves this by acting as an intermediary**: it owns all I/O and exposes only a fixed set of operations to the LLM. The model can think, but it can only act through the narrow interface the tool defines.
+The key problem with running an LLM CLI (like Claude Code) directly in CI is that it requires broad permissions — arbitrary shell commands, network access, filesystem writes — which is a security and reliability risk. **simulator-llm-pilot solves this by acting as an intermediary**: it owns all I/O and exposes only a fixed set of operations to the LLM. The model can think, but it can only act through the narrow interface the tool defines.
 
 ## How it works
 
 ```
 ┌──────────────────────────────────────────────────┐
-│  sim_pilot                                       │
+│  simulator-llm-pilot                             │
 │                                                  │
 │  ┌───────────┐      ┌───────────────────────┐    │
 │  │  Claude   │◄────►│  Tool Executor        │    │
@@ -29,10 +29,10 @@ The key problem with running an LLM CLI (like Claude Code) directly in CI is tha
 └──────────────────────────────────────────────────┘
 ```
 
-1. **sim_pilot** reads a markdown test file (e.g., "Create and Publish a Blank Page").
+1. **simulator-llm-pilot** reads a markdown test file (e.g., "Create and Publish a Blank Page").
 2. It sends the test steps to the **Claude API** along with a fixed set of tool definitions.
 3. The LLM responds with tool calls (`get_accessibility_tree`, `tap`, `type_text`, etc.).
-4. **sim_pilot** executes each tool call against the simulator via **WebDriverAgent** and `xcrun simctl`.
+4. **simulator-llm-pilot** executes each tool call against the simulator via **WebDriverAgent** and `xcrun simctl`.
 5. Results are returned to the LLM, which decides the next action.
 6. This loops until the LLM calls `complete_test` with a pass/fail verdict.
 7. The runner enforces declared test sections: a model-declared pass is downgraded to fail if required verification or cleanup REST work did not run successfully.
@@ -99,15 +99,15 @@ Tests are markdown files with natural-language sections. Example:
 ## Installation
 
 ```bash
-cd sim_pilot
-gem build sim_pilot.gemspec
-gem install sim_pilot-0.1.0.gem
+cd simulator-llm-pilot
+gem build simulator-llm-pilot.gemspec
+gem install simulator-llm-pilot-0.1.0.gem
 ```
 
 Or run directly from the repo:
 
 ```bash
-ruby bin/sim_pilot run ...
+ruby bin/simulator-llm-pilot run ...
 ```
 
 ## Usage
@@ -115,7 +115,7 @@ ruby bin/sim_pilot run ...
 ### Run a single test
 
 ```bash
-sim_pilot run path/to/create-blank-page.md \
+simulator-llm-pilot run path/to/create-blank-page.md \
   --app-bundle-id org.wordpress \
   --site-url https://test.example.com \
   --username testuser \
@@ -125,7 +125,7 @@ sim_pilot run path/to/create-blank-page.md \
 ### Run a full test suite
 
 ```bash
-sim_pilot run path/to/ui-tests/ \
+simulator-llm-pilot run path/to/ui-tests/ \
   --app-bundle-id org.wordpress \
   --site-url https://test.example.com \
   --username testuser \
@@ -136,9 +136,9 @@ sim_pilot run path/to/ui-tests/ \
 
 ```
 --app-bundle-id ID       App bundle ID (e.g., org.wordpress, com.automattic.jetpack)
---site-url URL           WordPress site URL (or SIM_PILOT_SITE_URL env)
---username USER          WordPress username (or SIM_PILOT_USERNAME env)
---app-password PASS      WordPress application password (or SIM_PILOT_APP_PASSWORD env)
+--site-url URL           WordPress site URL (or SIMULATOR_LLM_PILOT_SITE_URL env)
+--username USER          WordPress username (or SIMULATOR_LLM_PILOT_USERNAME env)
+--app-password PASS      WordPress application password (or SIMULATOR_LLM_PILOT_APP_PASSWORD env)
 --simulator-udid UDID    Target simulator (auto-detects booted simulator if omitted)
 --simulator-name NAME    Boot this simulator if none running
 --wda-port PORT          WDA port (default: 8100)
@@ -155,13 +155,13 @@ sim_pilot run path/to/ui-tests/ \
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `ANTHROPIC_API_KEY` | Yes | Claude API key |
-| `SIM_PILOT_SITE_URL` | No | WordPress site URL (alternative to `--site-url`) |
-| `SIM_PILOT_USERNAME` | No | WordPress username (alternative to `--username`) |
-| `SIM_PILOT_APP_PASSWORD` | No | WordPress app password (alternative to `--app-password`) |
+| `SIMULATOR_LLM_PILOT_SITE_URL` | No | WordPress site URL (alternative to `--site-url`) |
+| `SIMULATOR_LLM_PILOT_USERNAME` | No | WordPress username (alternative to `--username`) |
+| `SIMULATOR_LLM_PILOT_APP_PASSWORD` | No | WordPress app password (alternative to `--app-password`) |
 
 ## WDA setup
 
-sim_pilot uses [WebDriverAgent](https://github.com/appium/WebDriverAgent) to interact with the simulator UI.
+simulator-llm-pilot uses [WebDriverAgent](https://github.com/appium/WebDriverAgent) to interact with the simulator UI.
 
 ```bash
 # Clone
@@ -176,7 +176,7 @@ xcodebuild build-for-testing \
   CODE_SIGNING_ALLOWED=NO
 ```
 
-sim_pilot looks for WDA at `.build/WebDriverAgent/WebDriverAgent.xcodeproj` relative to the working directory. Use `--wda-project` to override.
+simulator-llm-pilot looks for WDA at `.build/WebDriverAgent/WebDriverAgent.xcodeproj` relative to the working directory. Use `--wda-project` to override.
 
 ## Output
 
@@ -202,7 +202,7 @@ rake test
 ## Project structure
 
 ```
-lib/sim_pilot/
+lib/simulator_llm_pilot/
 ├── agent.rb             # Core loop: LLM <-> tool executor
 ├── cli.rb               # Command-line interface
 ├── config.rb            # Configuration and validation
@@ -230,7 +230,7 @@ xcrun simctl boot "iPhone 16"
 # ... build and install the app ...
 
 # Run tests
-sim_pilot run Tests/AgentTests/ui-tests/ \
+simulator-llm-pilot run Tests/AgentTests/ui-tests/ \
   --app-bundle-id org.wordpress \
   --site-url "$TEST_SITE_URL" \
   --username "$TEST_USERNAME" \

@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module SimPilot
+module SimulatorLLMPilot
   # Orchestrates the full test run:
   # 1. Discover tests
   # 2. Resolve simulator

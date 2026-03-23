@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module SimPilot
+module SimulatorLLMPilot
   class Logger
     LEVELS = { debug: 0, info: 1, warn: 2, error: 3 }.freeze
 

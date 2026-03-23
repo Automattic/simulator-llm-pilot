@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module SimPilot
+module SimulatorLLMPilot
   # The core agent loop for a single test case.
   # Sends the test context to the LLM, receives tool calls, executes them,
   # and repeats until the test is complete or limits are hit.

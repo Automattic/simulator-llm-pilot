@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module SimPilot
+module SimulatorLLMPilot
   # Defines the fixed set of tools the LLM can call.
   # This is the sandbox boundary — the LLM cannot do anything outside these tools.
   module ToolDefinitions

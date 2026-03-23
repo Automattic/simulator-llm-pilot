@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module SimPilot
+module SimulatorLLMPilot
   # Wrapper around xcrun simctl for simulator operations.
   class Simulator
     def initialize(logger:)

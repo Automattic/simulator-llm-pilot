@@ -5,7 +5,7 @@ require_relative "test_helper"
 class LLMClientTest < Minitest::Test
   def setup
     @logger, = build_logger
-    @client = SimPilot::LLMClient.new(api_key: "key", model: "claude-test", logger: @logger)
+    @client = SimulatorLLMPilot::LLMClient.new(api_key: "key", model: "claude-test", logger: @logger)
   end
 
   def test_create_message_sends_deterministic_request_body
@@ -27,7 +27,7 @@ class LLMClientTest < Minitest::Test
     http = FakeHTTPTransport.new(response: response)
 
     Net::HTTP.stub(:start, proc { |*_args, **_kwargs, &block| block.call(http) }) do
-      assert_raises(SimPilot::LLMError) do
+      assert_raises(SimulatorLLMPilot::LLMError) do
         @client.create_message(system: "sys", messages: [], tools: [])
       end
     end
@@ -35,7 +35,7 @@ class LLMClientTest < Minitest::Test
 
   def test_timeout_raises_llm_error
     Net::HTTP.stub(:start, proc { |_host, _port, **_kwargs, &_block| raise Net::ReadTimeout }) do
-      assert_raises(SimPilot::LLMError) do
+      assert_raises(SimulatorLLMPilot::LLMError) do
         @client.create_message(system: "sys", messages: [], tools: [])
       end
     end

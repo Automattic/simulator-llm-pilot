@@ -5,7 +5,7 @@ require_relative "test_helper"
 class WDALifecycleTest < Minitest::Test
   def setup
     @logger, = build_logger
-    @lifecycle = SimPilot::WDALifecycle.new(port: 9010, logger: @logger)
+    @lifecycle = SimulatorLLMPilot::WDALifecycle.new(port: 9010, logger: @logger)
     @dir = Dir.mktmpdir
   end
 

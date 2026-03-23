@@ -14,10 +14,10 @@ class CLITest < Minitest::Test
 
   def test_version_prints_version
     out, = capture_io do
-      SimPilot::CLI.new(["version"]).run
+      SimulatorLLMPilot::CLI.new(["version"]).run
     end
 
-    assert_includes out, SimPilot::VERSION
+    assert_includes out, SimulatorLLMPilot::VERSION
   end
 
   def test_run_exits_zero_when_all_tests_pass
@@ -27,8 +27,8 @@ class CLITest < Minitest::Test
     with_env("ANTHROPIC_API_KEY" => "key") do
       error = assert_raises(SystemExit) do
         capture_io do
-          SimPilot::Runner.stub(:new, runner) do
-            SimPilot::CLI.new([
+          SimulatorLLMPilot::Runner.stub(:new, runner) do
+            SimulatorLLMPilot::CLI.new([
               "run", @test_path,
               "--app-bundle-id", "org.wordpress",
               "--site-url", "https://example.test",
@@ -50,8 +50,8 @@ class CLITest < Minitest::Test
     with_env("ANTHROPIC_API_KEY" => "key") do
       error = assert_raises(SystemExit) do
         capture_io do
-          SimPilot::Runner.stub(:new, runner) do
-            SimPilot::CLI.new([
+          SimulatorLLMPilot::Runner.stub(:new, runner) do
+            SimulatorLLMPilot::CLI.new([
               "run", @test_path,
               "--app-bundle-id", "org.wordpress",
               "--site-url", "https://example.test",

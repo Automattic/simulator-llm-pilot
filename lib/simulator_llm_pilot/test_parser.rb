@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module SimPilot
+module SimulatorLLMPilot
   class TestParser
     TestCase = Struct.new(:title, :file_path, :raw_content, :sections, keyword_init: true)
 

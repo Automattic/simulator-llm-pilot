@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module SimPilot
+module SimulatorLLMPilot
   # Manages starting and stopping the WebDriverAgent xcodebuild process.
   # Each instance is scoped to a specific simulator UDID and port, so
   # parallel runs on different simulators won't interfere with each other.

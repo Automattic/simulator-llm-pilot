@@ -43,12 +43,12 @@ class RunnerTest < Minitest::Test
       }
     )
 
-    SimPilot::Simulator.stub(:new, simulator) do
-      SimPilot::WDALifecycle.stub(:new, lifecycle) do
-        SimPilot::WDAClient.stub(:new, wda) do
-          SimPilot::LLMClient.stub(:new, llm) do
-            SimPilot::Agent.stub(:new, agent) do
-              results = SimPilot::Runner.new(config: @config, logger: @logger).run(@test_path)
+    SimulatorLLMPilot::Simulator.stub(:new, simulator) do
+      SimulatorLLMPilot::WDALifecycle.stub(:new, lifecycle) do
+        SimulatorLLMPilot::WDAClient.stub(:new, wda) do
+          SimulatorLLMPilot::LLMClient.stub(:new, llm) do
+            SimulatorLLMPilot::Agent.stub(:new, agent) do
+              results = SimulatorLLMPilot::Runner.new(config: @config, logger: @logger).run(@test_path)
 
               assert_equal ["pass"], results.map { |result| result[:status] }
               assert_equal 1, wda.calls.count { |call| call.first == :create_session }
@@ -66,13 +66,13 @@ class RunnerTest < Minitest::Test
     simulator = FakeSimulator.new
     lifecycle = FakeLifecycle.new
     wda = FakeWDA.new
-    wda.fail_on(:create_session, SimPilot::InfraError.new("session down"))
+    wda.fail_on(:create_session, SimulatorLLMPilot::InfraError.new("session down"))
 
-    SimPilot::Simulator.stub(:new, simulator) do
-      SimPilot::WDALifecycle.stub(:new, lifecycle) do
-        SimPilot::WDAClient.stub(:new, wda) do
-          SimPilot::LLMClient.stub(:new, Object.new) do
-            results = SimPilot::Runner.new(config: @config, logger: @logger).run(@test_path)
+    SimulatorLLMPilot::Simulator.stub(:new, simulator) do
+      SimulatorLLMPilot::WDALifecycle.stub(:new, lifecycle) do
+        SimulatorLLMPilot::WDAClient.stub(:new, wda) do
+          SimulatorLLMPilot::LLMClient.stub(:new, Object.new) do
+            results = SimulatorLLMPilot::Runner.new(config: @config, logger: @logger).run(@test_path)
 
             assert_equal ["infra_error"], results.map { |result| result[:status] }
             assert_includes results.first[:reason], "Failed to create WDA session"

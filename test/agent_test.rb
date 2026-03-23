@@ -6,7 +6,7 @@ class AgentTest < Minitest::Test
   def setup
     @config = build_config
     @logger, = build_logger
-    @test_case = SimPilot::TestParser::TestCase.new(
+    @test_case = SimulatorLLMPilot::TestParser::TestCase.new(
       title: "Publish Post",
       file_path: "/tmp/publish.md",
       raw_content: sample_markdown,
@@ -24,8 +24,8 @@ class AgentTest < Minitest::Test
     ])
     executor = FakeExecutor.new
 
-    SimPilot::ToolExecutor.stub(:new, executor) do
-      result = SimPilot::Agent.new(
+    SimulatorLLMPilot::ToolExecutor.stub(:new, executor) do
+      result = SimulatorLLMPilot::Agent.new(
         test_case: @test_case,
         config: @config,
         wda: FakeWDA.new,
@@ -42,11 +42,11 @@ class AgentTest < Minitest::Test
   end
 
   def test_returns_infra_error_when_llm_request_fails
-    llm = FakeLLM.new(error: SimPilot::LLMError.new("Anthropic API request failed"))
+    llm = FakeLLM.new(error: SimulatorLLMPilot::LLMError.new("Anthropic API request failed"))
     executor = FakeExecutor.new
 
-    SimPilot::ToolExecutor.stub(:new, executor) do
-      result = SimPilot::Agent.new(
+    SimulatorLLMPilot::ToolExecutor.stub(:new, executor) do
+      result = SimulatorLLMPilot::Agent.new(
         test_case: @test_case,
         config: @config,
         wda: FakeWDA.new,
@@ -72,8 +72,8 @@ class AgentTest < Minitest::Test
       { result: "INFRASTRUCTURE ERROR: down", total_infra_errors: 3, consecutive_infra_errors: 3 }
     ])
 
-    SimPilot::ToolExecutor.stub(:new, executor) do
-      result = SimPilot::Agent.new(
+    SimulatorLLMPilot::ToolExecutor.stub(:new, executor) do
+      result = SimulatorLLMPilot::Agent.new(
         test_case: @test_case,
         config: @config,
         wda: FakeWDA.new,
@@ -91,8 +91,8 @@ class AgentTest < Minitest::Test
     executor = FakeExecutor.new
     agent = nil
 
-    SimPilot::ToolExecutor.stub(:new, executor) do
-      agent = SimPilot::Agent.new(
+    SimulatorLLMPilot::ToolExecutor.stub(:new, executor) do
+      agent = SimulatorLLMPilot::Agent.new(
         test_case: @test_case,
         config: @config.tap { |config| config.max_context_turns = 1 },
         wda: FakeWDA.new,

@@ -5,7 +5,7 @@ require_relative "test_helper"
 class SimulatorTest < Minitest::Test
   def setup
     @logger, = build_logger
-    @simulator = SimPilot::Simulator.new(logger: @logger)
+    @simulator = SimulatorLLMPilot::Simulator.new(logger: @logger)
   end
 
   def test_booted_device_parses_json_output
@@ -24,7 +24,7 @@ class SimulatorTest < Minitest::Test
 
   def test_launch_app_raises_infra_error_on_failure
     Open3.stub(:capture3, ["", "launch failed", fake_status(false)]) do
-      assert_raises(SimPilot::InfraError) do
+      assert_raises(SimulatorLLMPilot::InfraError) do
         @simulator.launch_app("SIM-1", "org.wordpress", args: {})
       end
     end
