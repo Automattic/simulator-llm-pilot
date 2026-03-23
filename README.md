@@ -247,3 +247,9 @@ simulator-llm-pilot run Tests/AgentTests/ui-tests/ \
 ```
 
 The key advantage over running Claude Code directly in CI: **no arbitrary code execution**. The LLM can only interact with the simulator through the predefined tool set. No `curl`, no `jq`, no shell scripts.
+
+## License
+
+<a href="https://github.com/Automattic/simulator-llm-pilot/blob/trunk/LICENSE">
+    <img alt="License" src="https://img.shields.io/github/license/Automattic/simulator-llm-pilot">
+</a>
