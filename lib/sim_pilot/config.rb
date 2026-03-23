@@ -1,0 +1,40 @@
+# frozen_string_literal: true
+
+module SimPilot
+  class Config
+    attr_accessor :app_bundle_id, :site_url, :username, :app_password,
+                  :simulator_udid, :simulator_name,
+                  :wda_port, :wda_project_path,
+                  :results_dir, :screenshots_dir,
+                  :anthropic_api_key, :anthropic_model,
+                  :max_turns_per_test, :test_timeout
+
+    def initialize
+      @wda_port = 8100
+      @anthropic_model = "claude-sonnet-4-20250514"
+      @max_turns_per_test = 100
+      @test_timeout = 600 # 10 minutes per test
+      @anthropic_api_key = ENV["ANTHROPIC_API_KEY"]
+      @site_url = ENV["SIM_PILOT_SITE_URL"]
+      @username = ENV["SIM_PILOT_USERNAME"]
+      @app_password = ENV["SIM_PILOT_APP_PASSWORD"]
+    end
+
+    def validate!
+      errors = []
+      errors << "ANTHROPIC_API_KEY env var is required" if blank?(@anthropic_api_key)
+      errors << "--app-bundle-id is required" if blank?(@app_bundle_id)
+      errors << "--site-url is required (or set SIM_PILOT_SITE_URL)" if blank?(@site_url)
+      errors << "--username is required (or set SIM_PILOT_USERNAME)" if blank?(@username)
+      errors << "--app-password is required (or set SIM_PILOT_APP_PASSWORD)" if blank?(@app_password)
+
+      raise ArgumentError, "Configuration errors:\n  #{errors.join("\n  ")}" unless errors.empty?
+    end
+
+    private
+
+    def blank?(value)
+      value.nil? || value.strip.empty?
+    end
+  end
+end

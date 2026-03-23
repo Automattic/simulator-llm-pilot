@@ -1,0 +1,4 @@
+*.gem
+results/
+.bundle/
+Gemfile.lock
