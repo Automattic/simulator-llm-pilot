@@ -43,9 +43,17 @@ module SimulatorLLMPilot
         the tree. Tap "Allow", "OK", or "Don't Allow" as appropriate.
       - **Loading states**: If the tree shows a loading indicator, wait 2 seconds
         and re-fetch the tree.
-      - **Login**: If the app shows a login screen after launch, tap "Enter your
-        existing site address", type the site URL, then tap Continue. The app will
-        auto-login using the launch arguments.
+      - **Login**:
+        - This runner is configured for a self-hosted site, not a WordPress.com account.
+        - NEVER tap "Continue with WordPress.com", NEVER enter WordPress.com email/password,
+          and NEVER request a login link.
+        - NEVER type a password manually. The app password is already passed via the
+          launch arguments for self-hosted login.
+        - Tap "Enter your existing site address", then enter the site host first
+          (without scheme, for example `example.com`). If the app rejects the host-only
+          form, try the full site URL once.
+        - If you reach any WordPress.com email/password screen, back out and return to
+          the self-hosted flow.
       - **Failed tap**: If the tree is unchanged after a tap, try: (a) re-fetch tree
         and recompute coordinates, (b) use tap_element, (c) try a slightly offset position.
 
@@ -81,6 +89,7 @@ module SimulatorLLMPilot
       @logger.info "Starting: #{@test_case.title}"
 
       app_name = @config.app_bundle_id.include?('jetpack') ? 'Jetpack' : 'WordPress'
+      site_host = URI.parse(@config.site_url).host || @config.site_url
 
       user_message = <<~MSG
         ## App
@@ -88,7 +97,9 @@ module SimulatorLLMPilot
 
         ## Test Site
         - URL: #{@config.site_url}
+        - Host: #{site_host}
         - Username: #{@config.username}
+        - Authentication mode: self-hosted via launch arguments only
 
         ## Declared Sections
         - Verification required: #{verification_expected? ? 'yes' : 'no'}
