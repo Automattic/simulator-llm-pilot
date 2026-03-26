@@ -12,7 +12,7 @@ module SimulatorLLMPilot
 
     def initialize
       @wda_port = 8100
-      @anthropic_model = 'claude-sonnet-4-20250514'
+      @anthropic_model = 'claude-sonnet-4-6'
       @max_turns_per_test = 100
       @test_timeout = 600 # 10 minutes per test
       @max_context_turns = 20 # compress accessibility trees older than this many turns

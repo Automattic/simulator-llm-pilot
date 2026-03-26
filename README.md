@@ -152,7 +152,7 @@ When you pass a directory, the runner executes every `.md` file in that director
 --wda-port PORT          WDA port (default: 8100)
 --wda-project PATH       Path to WebDriverAgent.xcodeproj
 --results-dir DIR        Output directory for results
---model MODEL            Anthropic model (default: claude-sonnet-4-20250514)
+--model MODEL            Anthropic model (default: claude-sonnet-4-6)
 --max-turns N            Max tool call rounds per test (default: 100)
 --timeout SECS           Timeout per test in seconds (default: 600)
 --max-context-turns N    Compress accessibility trees older than N turns (default: 20)

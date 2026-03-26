@@ -86,7 +86,7 @@ module SimulatorLLMPilot
           @config.results_dir = v
         end
 
-        opts.on('--model MODEL', 'Anthropic model (default: claude-sonnet-4-20250514)') do |v|
+        opts.on('--model MODEL', 'Anthropic model (default: claude-sonnet-4-6)') do |v|
           @config.anthropic_model = v
         end
 
