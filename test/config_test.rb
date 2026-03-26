@@ -40,4 +40,17 @@ class ConfigTest < Minitest::Test
       assert_includes error.message, '--max-context-turns must be zero or greater'
     end
   end
+
+  def test_validate_normalizes_site_url_without_scheme
+    config = SimulatorLLMPilot::Config.new
+    config.anthropic_api_key = 'key-123'
+    config.app_bundle_id = 'org.wordpress'
+    config.site_url = 'wp.test'
+    config.username = 'ian'
+    config.app_password = 'secret'
+
+    config.validate!
+
+    assert_equal 'https://wp.test', config.site_url
+  end
 end

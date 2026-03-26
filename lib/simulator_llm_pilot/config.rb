@@ -24,6 +24,8 @@ module SimulatorLLMPilot
     end
 
     def validate!
+      @site_url = normalized_site_url(@site_url)
+
       errors = []
       errors << 'ANTHROPIC_API_KEY env var is required' if blank?(@anthropic_api_key)
       errors << '--app-bundle-id is required' if blank?(@app_bundle_id)
@@ -69,6 +71,17 @@ module SimulatorLLMPilot
       errors << '--rest-api-prefix must start with /' unless @rest_api_allowed_prefix.start_with?('/')
       errors << '--rest-api-prefix must not contain ..' if @rest_api_allowed_prefix.include?('..')
       errors
+    end
+
+    def normalized_site_url(value)
+      return value if blank?(value)
+
+      uri = URI.parse(value)
+      return value if uri.scheme
+
+      "https://#{value}"
+    rescue URI::InvalidURIError
+      value
     end
   end
 end
