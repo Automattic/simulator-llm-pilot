@@ -36,7 +36,7 @@ module SimulatorLLMPilot
 
     def execute(tool_name, input)
       @tool_usage[tool_name] += 1
-      @logger.debug "Tool call: #{tool_name}(#{truncate(input.to_json, 200)})"
+      @logger.debug "Tool call: #{tool_name}(#{truncate(sanitized_debug_input(input), 200)})"
 
       result = case tool_name
                when 'get_accessibility_tree' then exec_get_tree
@@ -99,12 +99,13 @@ module SimulatorLLMPilot
     end
 
     def exec_tap_element(input)
-      identifier = input['identifier']
-      label = input['label']
+      identifier = present_string(input['identifier'])
+      label = present_string(input['label'])
       element_id = nil
 
       element_id = @wda.find_element(using: 'accessibility id', value: identifier) if identifier
-      element_id = @wda.find_element(using: 'link text', value: label) if element_id.nil? && label
+      element_id = @wda.find_element(using: 'accessibility id', value: label) if element_id.nil? && label
+      element_id = @wda.find_element(using: '-ios predicate string', value: label_predicate(label)) if element_id.nil? && label
 
       if element_id.nil?
         target = identifier || label || '(no identifier or label provided)'
@@ -128,9 +129,8 @@ module SimulatorLLMPilot
     def exec_type_text(input)
       text = input['text']
       @wda.type_text(text)
-      display = text.length > 40 ? "#{text[0..39]}..." : text
-      @logger.info "  Typed '#{display}'"
-      "Typed: #{text}"
+      @logger.info "  Typed #{text.to_s.length} characters"
+      "Typed #{text.to_s.length} characters"
     end
 
     def exec_clear_text
@@ -216,9 +216,14 @@ module SimulatorLLMPilot
     end
 
     def exec_complete_test(input)
+      status = input['status']
+      reason = input['reason'].to_s.strip
+      raise "complete_test status must be 'pass' or 'fail'" unless %w[pass fail].include?(status)
+      raise 'complete_test reason must not be empty' if reason.empty?
+
       @test_completed = true
-      @test_status = input['status']
-      @test_reason = input['reason']
+      @test_status = status
+      @test_reason = reason
       @logger.info "  Test result: #{@test_status.upcase} — #{@test_reason}"
       "Test marked as #{@test_status}: #{@test_reason}"
     end
@@ -231,6 +236,8 @@ module SimulatorLLMPilot
     end
 
     def validate_rest_api_path!(path)
+      raise 'REST API path is required' if present_string(path).nil?
+
       decoded = URI::RFC2396_PARSER.unescape(path.to_s)
       raise "REST API path must not contain '..'" if decoded.include?('..')
 
@@ -277,6 +284,42 @@ module SimulatorLLMPilot
 
     def truncate(str, max)
       str.length > max ? "#{str[0...max]}..." : str
+    end
+
+    def sanitized_debug_input(input)
+      JSON.generate(sanitize_for_log(input))
+    end
+
+    def sanitize_for_log(value)
+      case value
+      when Hash
+        value.transform_values { |inner| sanitize_for_log(inner) }
+      when Array
+        value.map { |inner| sanitize_for_log(inner) }
+      when String
+        redact_string(value)
+      else
+        value
+      end
+    end
+
+    def redact_string(value)
+      return value if value.nil?
+      return '[REDACTED]' if !@config.app_password.nil? && value.include?(@config.app_password)
+
+      value
+    end
+
+    def present_string(value)
+      string = value.to_s.strip
+      string.empty? ? nil : string
+    end
+
+    def label_predicate(label)
+      return nil if label.nil?
+
+      escaped = label.gsub('\\', '\\\\').gsub('"', '\"')
+      %(name == "#{escaped}" OR label == "#{escaped}")
     end
   end
 end

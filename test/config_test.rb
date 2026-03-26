@@ -24,6 +24,8 @@ class ConfigTest < Minitest::Test
   def test_validate_reports_missing_and_invalid_values
     with_env('ANTHROPIC_API_KEY' => nil) do
       config = SimulatorLLMPilot::Config.new
+      config.site_url = 'not a url'
+      config.rest_api_allowed_prefix = 'wp-json'
       config.wda_port = 0
       config.max_turns_per_test = 0
       config.test_timeout = 0
@@ -32,6 +34,8 @@ class ConfigTest < Minitest::Test
       error = assert_raises(ArgumentError) { config.validate! }
 
       assert_includes error.message, 'ANTHROPIC_API_KEY env var is required'
+      assert_includes error.message, '--site-url must be a valid URL'
+      assert_includes error.message, '--rest-api-prefix must start with /'
       assert_includes error.message, '--wda-port must be a positive integer'
       assert_includes error.message, '--max-context-turns must be zero or greater'
     end

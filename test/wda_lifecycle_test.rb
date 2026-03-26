@@ -16,7 +16,7 @@ class WDALifecycleTest < Minitest::Test
   def test_start_reuses_own_running_process
     @lifecycle.stub(:running?, true) do
       @lifecycle.stub(:own_process_running?, true) do
-        assert @lifecycle.start(udid: 'SIM-1', wda_project_path: '/tmp/ignored')
+        assert @lifecycle.start(udid: 'SIM-1', wda_project_path: '/tmp/ignored', wda_derived_data_path: '/tmp/DerivedData')
       end
     end
   end
@@ -25,7 +25,7 @@ class WDALifecycleTest < Minitest::Test
     @lifecycle.stub(:running?, true) do
       @lifecycle.stub(:own_process_running?, false) do
         error = assert_raises(RuntimeError) do
-          @lifecycle.start(udid: 'SIM-1', wda_project_path: '/tmp/ignored')
+          @lifecycle.start(udid: 'SIM-1', wda_project_path: '/tmp/ignored', wda_derived_data_path: '/tmp/DerivedData')
         end
 
         assert_includes error.message, 'already in use'

@@ -34,6 +34,8 @@ module SimulatorLLMPilot
       errors << '--max-turns must be a positive integer' unless positive_integer?(@max_turns_per_test)
       errors << '--timeout must be a positive integer' unless positive_integer?(@test_timeout)
       errors << '--max-context-turns must be zero or greater' if @max_context_turns.nil? || @max_context_turns.negative?
+      errors.concat(site_url_errors)
+      errors.concat(rest_api_prefix_errors)
 
       raise ArgumentError, "Configuration errors:\n  #{errors.join("\n  ")}" unless errors.empty?
     end
@@ -46,6 +48,27 @@ module SimulatorLLMPilot
 
     def positive_integer?(value)
       value.is_a?(Integer) && value.positive?
+    end
+
+    def site_url_errors
+      return [] if blank?(@site_url)
+
+      uri = URI.parse(@site_url)
+      errors = []
+      errors << '--site-url must use http or https' unless uri.is_a?(URI::HTTP)
+      errors << '--site-url must include a host' if blank?(uri.host)
+      errors
+    rescue URI::InvalidURIError
+      ['--site-url must be a valid URL']
+    end
+
+    def rest_api_prefix_errors
+      return [] if @rest_api_allowed_prefix.nil? || @rest_api_allowed_prefix.empty?
+
+      errors = []
+      errors << '--rest-api-prefix must start with /' unless @rest_api_allowed_prefix.start_with?('/')
+      errors << '--rest-api-prefix must not contain ..' if @rest_api_allowed_prefix.include?('..')
+      errors
     end
   end
 end

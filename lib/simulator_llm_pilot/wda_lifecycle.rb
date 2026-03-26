@@ -19,8 +19,9 @@ module SimulatorLLMPilot
       false
     end
 
-    def start(udid:, wda_project_path:, max_wait: 120)
+    def start(udid:, wda_project_path:, wda_derived_data_path: nil, max_wait: 120)
       @udid = udid
+      wda_derived_data_path ||= File.join(File.dirname(wda_project_path), 'DerivedData')
 
       if running?
         if own_process_running?
@@ -38,7 +39,8 @@ module SimulatorLLMPilot
               "git clone https://github.com/appium/WebDriverAgent.git .build/WebDriverAgent\n  " \
               "cd .build/WebDriverAgent && xcodebuild build-for-testing \\\n    " \
               "-project WebDriverAgent.xcodeproj -scheme WebDriverAgentRunner \\\n    " \
-              "-destination 'platform=iOS Simulator,id=#{udid}' CODE_SIGNING_ALLOWED=NO"
+              "-destination 'platform=iOS Simulator,id=#{udid}' \\\n    " \
+              "-derivedDataPath '#{wda_derived_data_path}' CODE_SIGNING_ALLOWED=NO"
       end
 
       cmd = [
@@ -46,6 +48,7 @@ module SimulatorLLMPilot
         '-project', wda_project_path,
         '-scheme', 'WebDriverAgentRunner',
         '-destination', "id=#{udid}",
+        '-derivedDataPath', wda_derived_data_path,
         "USE_PORT=#{@port}",
         'CODE_SIGNING_ALLOWED=NO'
       ]

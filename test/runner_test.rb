@@ -81,4 +81,62 @@ class RunnerTest < Minitest::Test
       end
     end
   end
+
+  def test_resolve_simulator_prefers_requested_name_over_other_booted_device
+    simulator = FakeSimulator.new
+    simulator.booted_device_result = { udid: 'SIM-OTHER', name: 'iPhone 15' }
+    lifecycle = FakeLifecycle.new
+    wda = FakeWDA.new
+    llm = Object.new
+    agent = Struct.new(:result) do
+      def run
+        result
+      end
+    end.new(
+      {
+        status: 'pass',
+        reason: 'done',
+        model_status: 'pass',
+        model_reason: 'done',
+        enforced_failures: [],
+        tool_usage: {},
+        verification_expected: false,
+        verification_ran: false,
+        verification_satisfied: true,
+        cleanup_expected: false,
+        cleanup_ran: false,
+        cleanup_satisfied: true,
+        turns: 1,
+        total_infra_errors: 0
+      }
+    )
+    @config.simulator_udid = nil
+    @config.simulator_name = 'iPhone 16'
+
+    boot_lookup_count = 0
+    simulator.define_singleton_method(:booted_device) do |name: nil|
+      @calls << [:booted_device, name]
+      if name == 'iPhone 16'
+        boot_lookup_count += 1
+        boot_lookup_count > 1 ? { udid: 'SIM-16', name: 'iPhone 16' } : nil
+      else
+        { udid: 'SIM-OTHER', name: 'iPhone 15' }
+      end
+    end
+
+    SimulatorLLMPilot::Simulator.stub(:new, simulator) do
+      SimulatorLLMPilot::WDALifecycle.stub(:new, lifecycle) do
+        SimulatorLLMPilot::WDAClient.stub(:new, wda) do
+          SimulatorLLMPilot::LLMClient.stub(:new, llm) do
+            SimulatorLLMPilot::Agent.stub(:new, agent) do
+              SimulatorLLMPilot::Runner.new(config: @config, logger: @logger).run(@test_path)
+
+              assert_equal 'SIM-16', @config.simulator_udid
+              assert_includes simulator.calls, [:boot, 'iPhone 16']
+            end
+          end
+        end
+      end
+    end
+  end
 end

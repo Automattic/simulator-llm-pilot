@@ -7,17 +7,25 @@ module SimulatorLLMPilot
       @logger = logger
     end
 
-    def booted_device
+    def booted_devices
       output, status = Open3.capture2('xcrun', 'simctl', 'list', 'devices', 'booted', '-j')
-      return nil unless status.success?
+      return [] unless status.success?
 
       data = JSON.parse(output)
-      data.fetch('devices', {}).each_value do |devices|
-        devices.each do |d|
-          return { udid: d['udid'], name: d['name'] } if d['state'] == 'Booted'
+      data.fetch('devices', {}).each_value.flat_map do |devices|
+        devices.filter_map do |device|
+          next unless device['state'] == 'Booted'
+
+          { udid: device['udid'], name: device['name'] }
         end
       end
-      nil
+    end
+
+    def booted_device(name: nil)
+      devices = booted_devices
+      return devices.first if name.nil? || name.strip.empty?
+
+      devices.find { |device| device[:name] == name }
     end
 
     def launch_app(udid, bundle_id, args: {})

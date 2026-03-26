@@ -137,23 +137,33 @@ module SimulatorLLMPilot
         return
       end
 
-      device = @simulator.booted_device
-      if device
-        @config.simulator_udid = device[:udid]
-        @logger.info "Auto-detected simulator: #{device[:name]} (#{device[:udid]})"
-        return
-      end
-
       if @config.simulator_name
+        device = @simulator.booted_device(name: @config.simulator_name)
+        if device
+          @config.simulator_udid = device[:udid]
+          @logger.info "Using requested simulator: #{device[:name]} (#{device[:udid]})"
+          return
+        end
+
         @logger.info "Booting simulator: #{@config.simulator_name}..."
         @simulator.boot(@config.simulator_name)
         sleep 5
-        device = @simulator.booted_device
+        device = @simulator.booted_device(name: @config.simulator_name)
         if device
           @config.simulator_udid = device[:udid]
           @logger.info "Booted: #{device[:name]} (#{device[:udid]})"
           return
         end
+
+        raise "Simulator '#{@config.simulator_name}' did not reach the Booted state.\n" \
+              'Specify --simulator-udid explicitly if you need a different device.'
+      end
+
+      device = @simulator.booted_device
+      if device
+        @config.simulator_udid = device[:udid]
+        @logger.info "Auto-detected simulator: #{device[:name]} (#{device[:udid]})"
+        return
       end
 
       raise "No booted simulator found. Boot one with:\n  " \
@@ -174,10 +184,12 @@ module SimulatorLLMPilot
       wda_path = @config.wda_project_path ||
                  File.join(Dir.pwd, '.build', 'WebDriverAgent', 'WebDriverAgent.xcodeproj')
       @config.wda_project_path = wda_path
+      wda_derived_data_path = File.join(File.dirname(wda_path), 'DerivedData')
 
       @wda_lifecycle.start(
         udid: @config.simulator_udid,
-        wda_project_path: wda_path
+        wda_project_path: wda_path,
+        wda_derived_data_path: wda_derived_data_path
       )
     end
 

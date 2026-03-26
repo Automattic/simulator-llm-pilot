@@ -70,6 +70,7 @@ module SimulatorLLMPilotTestHelpers
       @calls = []
       @failures = {}
       @find_element_result = nil
+      @find_element_results = {}
     end
 
     def fail_on(method_name, error)
@@ -77,6 +78,10 @@ module SimulatorLLMPilotTestHelpers
     end
 
     attr_writer :find_element_result
+
+    def set_find_element_result(using:, value:, result:)
+      @find_element_results[[using, value]] = result
+    end
 
     def create_session
       maybe_raise(:create_session)
@@ -113,6 +118,8 @@ module SimulatorLLMPilotTestHelpers
     def find_element(using:, value:)
       maybe_raise(:find_element)
       @calls << [:find_element, using, value]
+      return @find_element_results.fetch([using, value]) if @find_element_results.key?([using, value])
+
       @find_element_result
     end
 
@@ -143,10 +150,13 @@ module SimulatorLLMPilotTestHelpers
       @failures[method_name] = error
     end
 
-    def booted_device
+    def booted_device(name: nil)
       maybe_raise(:booted_device)
-      @calls << [:booted_device]
-      @booted_device_result
+      @calls << [:booted_device, name]
+      return @booted_device_result if name.nil? || @booted_device_result.nil?
+      return @booted_device_result if @booted_device_result[:name] == name
+
+      nil
     end
 
     def launch_app(udid, bundle_id, args:)
