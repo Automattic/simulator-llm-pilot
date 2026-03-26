@@ -30,7 +30,7 @@ class ToolExecutorTest < Minitest::Test
   def test_tap_element_uses_predicate_fallback_for_labels
     @wda.set_find_element_result(using: 'accessibility id', value: 'Publish', result: nil)
     @wda.set_find_element_result(
-      using: '-ios predicate string',
+      using: 'predicate string',
       value: 'name == "Publish" OR label == "Publish"',
       result: 'element-123'
     )
@@ -38,7 +38,7 @@ class ToolExecutorTest < Minitest::Test
     result = @executor.execute('tap_element', { 'label' => 'Publish' })
 
     assert_equal 'Tapped element: Publish', result
-    assert_includes @wda.calls, [:find_element, '-ios predicate string', 'name == "Publish" OR label == "Publish"']
+    assert_includes @wda.calls, [:find_element, 'predicate string', 'name == "Publish" OR label == "Publish"']
     assert_includes @wda.calls, [:click_element, 'element-123']
   end
 

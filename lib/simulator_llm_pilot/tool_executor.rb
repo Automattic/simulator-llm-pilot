@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require 'cgi'
+
 module SimulatorLLMPilot
   # Executes tool calls from the LLM against the actual simulator/WDA/REST API.
   # This is the enforcement layer — only these operations are possible.
@@ -105,7 +107,7 @@ module SimulatorLLMPilot
 
       element_id = @wda.find_element(using: 'accessibility id', value: identifier) if identifier
       element_id = @wda.find_element(using: 'accessibility id', value: label) if element_id.nil? && label
-      element_id = @wda.find_element(using: '-ios predicate string', value: label_predicate(label)) if element_id.nil? && label
+      element_id = @wda.find_element(using: 'predicate string', value: label_predicate(label)) if element_id.nil? && label
 
       if element_id.nil?
         target = identifier || label || '(no identifier or label provided)'
@@ -238,7 +240,7 @@ module SimulatorLLMPilot
     def validate_rest_api_path!(path)
       raise 'REST API path is required' if present_string(path).nil?
 
-      decoded = URI::RFC2396_PARSER.unescape(path.to_s)
+      decoded = CGI.unescape(path.to_s)
       raise "REST API path must not contain '..'" if decoded.include?('..')
 
       allowed = @config.rest_api_allowed_prefix
