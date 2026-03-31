@@ -106,6 +106,20 @@ module SimulatorLLMPilot
           @config.rest_api_allowed_prefix = v
         end
 
+        opts.on('--app-name NAME', 'Display name for the app (defaults to bundle ID)') do |v|
+          @config.app_name = v
+        end
+
+        opts.on('--app-instructions-file FILE', 'File with app-specific instructions for the LLM (login flow, etc.)') do |v|
+          raise ArgumentError, "App instructions file not found: #{v}" unless File.exist?(v)
+
+          @config.app_instructions = File.read(v)
+        end
+
+        opts.on('--max-screenshots N', Integer, 'Max screenshots per test (default: 5, 0 to disable)') do |v|
+          @config.max_screenshots_per_test = v.zero? ? nil : v
+        end
+
         opts.on('--debug', 'Enable debug logging') do
           @log_level = :debug
         end
@@ -145,9 +159,9 @@ module SimulatorLLMPilot
       puts <<~HELP
         simulator-llm-pilot v#{VERSION} — AI-driven iOS E2E test runner
 
-        Runs natural-language test cases (markdown files) against a WordPress or
-        Jetpack iOS app in a simulator. An LLM navigates the app through a sandboxed
-        set of tools (WDA + simctl) — no arbitrary code execution.
+        Runs natural-language test cases (markdown files) against an iOS app in a
+        simulator. An LLM navigates the app through a sandboxed set of tools
+        (WDA + simctl) — no arbitrary code execution.
 
         Usage:
           simulator-llm-pilot run <test_file_or_dir> [options]
@@ -155,23 +169,18 @@ module SimulatorLLMPilot
           simulator-llm-pilot help
 
         Example:
-          simulator-llm-pilot run tests/create-blank-page.md \\
-            --app-bundle-id org.wordpress \\
-            --site-url https://test.example.com \\
-            --username testuser \\
-            --app-password "xxxx xxxx xxxx xxxx"
-
           simulator-llm-pilot run tests/ \\
             --app-bundle-id com.automattic.jetpack \\
             --site-url https://test.example.com \\
             --username testuser \\
-            --app-password "xxxx xxxx xxxx xxxx"
+            --app-password "xxxx xxxx xxxx xxxx" \\
+            --app-instructions-file instructions.md
 
         Environment variables:
           ANTHROPIC_API_KEY                  Required — Claude API key
-          SIMULATOR_LLM_PILOT_SITE_URL      WordPress site URL
-          SIMULATOR_LLM_PILOT_USERNAME      WordPress username
-          SIMULATOR_LLM_PILOT_APP_PASSWORD  WordPress application password
+          SIMULATOR_LLM_PILOT_SITE_URL      Site URL for REST API calls
+          SIMULATOR_LLM_PILOT_USERNAME      Username for authentication
+          SIMULATOR_LLM_PILOT_APP_PASSWORD  Application password
 
         Run 'simulator-llm-pilot run --help' for all options.
       HELP

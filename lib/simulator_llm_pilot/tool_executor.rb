@@ -142,6 +142,12 @@ module SimulatorLLMPilot
     end
 
     def exec_screenshot(input)
+      max = @config.max_screenshots_per_test
+      if max && @screenshot_count >= max
+        @logger.debug "Screenshot skipped (limit of #{max} reached)"
+        return "Screenshot limit reached (#{max} per test). Use get_accessibility_tree instead."
+      end
+
       label = input['label'] || 'screenshot'
       @screenshot_count += 1
       safe_label = label.gsub(/[^a-zA-Z0-9_-]/, '_')

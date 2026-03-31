@@ -2,13 +2,14 @@
 
 module SimulatorLLMPilot
   class Config
-    attr_accessor :app_bundle_id, :site_url, :username, :app_password,
+    attr_accessor :app_bundle_id, :app_name, :site_url, :username, :app_password,
                   :simulator_udid, :simulator_name,
                   :wda_port, :wda_project_path,
                   :results_dir, :screenshots_dir,
                   :anthropic_api_key, :anthropic_model,
                   :max_turns_per_test, :test_timeout,
-                  :max_context_turns, :rest_api_allowed_prefix
+                  :max_context_turns, :max_screenshots_per_test,
+                  :rest_api_allowed_prefix, :app_instructions
 
     def initialize
       @wda_port = 8100
@@ -16,7 +17,10 @@ module SimulatorLLMPilot
       @max_turns_per_test = 100
       @test_timeout = 600 # 10 minutes per test
       @max_context_turns = 20 # compress accessibility trees older than this many turns
+      @max_screenshots_per_test = 5
       @rest_api_allowed_prefix = '/wp-json/' # only allow WP REST API paths
+      @app_instructions = nil # caller-provided app-specific instructions (login flow, etc.)
+      @app_name = nil # optional display name for the app (defaults to bundle ID)
       @anthropic_api_key = ENV.fetch('ANTHROPIC_API_KEY', nil)
       @site_url = ENV.fetch('SIMULATOR_LLM_PILOT_SITE_URL', nil)
       @username = ENV.fetch('SIMULATOR_LLM_PILOT_USERNAME', nil)
