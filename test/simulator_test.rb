@@ -44,4 +44,21 @@ class SimulatorTest < Minitest::Test
       end
     end
   end
+
+  def test_screenshot_creates_parent_directory_before_running_simctl
+    Dir.mktmpdir do |dir|
+      path = File.join(dir, 'nested', 'login_error-1.png')
+      calls = []
+
+      Open3.stub(:capture3, proc do |*args|
+        calls << args
+        ['', '', fake_status(true)]
+      end) do
+        assert_equal path, @simulator.screenshot('SIM-1', path)
+      end
+
+      assert_path_exists File.dirname(path)
+      assert_equal ['xcrun', 'simctl', 'io', 'SIM-1', 'screenshot', path], calls.first
+    end
+  end
 end

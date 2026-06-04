@@ -44,6 +44,7 @@ module SimulatorLLMPilot
     end
 
     def screenshot(udid, path)
+      FileUtils.mkdir_p(File.dirname(path))
       _, err, status = Open3.capture3('xcrun', 'simctl', 'io', udid, 'screenshot', path)
       raise InfraError, "Failed to take screenshot: #{err}" unless status.success?
 

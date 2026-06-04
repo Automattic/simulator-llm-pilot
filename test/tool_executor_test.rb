@@ -120,6 +120,21 @@ class ToolExecutorTest < Minitest::Test
     assert_equal 'Typed 6 characters', result
   end
 
+  def test_screenshot_uses_configured_directory_and_sanitizes_label
+    Dir.mktmpdir do |dir|
+      @config.screenshots_dir = File.join(dir, 'screenshots')
+
+      result = @executor.execute('take_screenshot', { 'label' => 'login/error 1' })
+      _method, udid, path = @simulator.calls.last
+
+      expected_path = File.join(@config.screenshots_dir, 'login_error_1-1.png')
+      assert_equal @config.simulator_udid, udid
+      assert_equal expected_path, path
+      assert_path_exists @config.screenshots_dir
+      assert_includes result, expected_path
+    end
+  end
+
   def test_sanitize_for_log_preserves_nil_values
     sanitized = @executor.send(:sanitize_for_log, { 'token' => nil, 'items' => [nil, 'ok'] })
 
