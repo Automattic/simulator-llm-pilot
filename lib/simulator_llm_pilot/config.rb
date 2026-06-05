@@ -8,7 +8,8 @@ module SimulatorLLMPilot
                   :results_dir, :screenshots_dir,
                   :anthropic_api_key, :anthropic_model,
                   :max_turns_per_test, :test_timeout,
-                  :max_context_turns, :max_screenshots_per_test,
+                  :max_context_turns, :compress_context_when_chars_exceed,
+                  :max_screenshots_per_test,
                   :rest_api_allowed_prefix, :app_instructions
 
     def initialize
@@ -16,7 +17,12 @@ module SimulatorLLMPilot
       @anthropic_model = 'claude-sonnet-4-6'
       @max_turns_per_test = 100
       @test_timeout = 600 # 10 minutes per test
-      @max_context_turns = 20 # compress accessibility trees older than this many turns
+      @max_context_turns = 20 # when compressing, keep this many recent turns of trees intact
+      # Only compress old accessibility trees once the conversation grows past this
+      # many characters (~150k tokens). Below it, history stays append-only so prompt
+      # caching keeps hitting; above it, compression acts as a context-window safety
+      # valve for unusually long tests. See Agent#compress_old_trees!.
+      @compress_context_when_chars_exceed = 600_000
       @max_screenshots_per_test = 5
       @rest_api_allowed_prefix = '/wp-json/' # only allow WP REST API paths
       @app_instructions = nil # caller-provided app-specific instructions (login flow, etc.)

@@ -87,14 +87,46 @@ class AgentTest < Minitest::Test
     end
   end
 
-  def test_compresses_old_accessibility_trees
-    executor = FakeExecutor.new
-    agent = nil
+  def test_compresses_old_accessibility_trees_once_over_the_size_threshold
+    agent = build_agent_with_trees(compress_threshold: 0)
 
-    SimulatorLLMPilot::ToolExecutor.stub(:new, executor) do
+    agent.send(:compress_old_trees!)
+    messages = agent.instance_variable_get(:@messages)
+
+    assert_includes messages[1][:content][0][:content], 'compressed to save context'
+    assert_equal recent_tree, messages[3][:content][0][:content]
+  end
+
+  def test_does_not_compress_until_the_context_is_large
+    # Below the threshold, history stays append-only so prompt caching keeps hitting.
+    agent = build_agent_with_trees(compress_threshold: 10_000_000)
+
+    agent.send(:compress_old_trees!)
+    messages = agent.instance_variable_get(:@messages)
+
+    assert_equal old_tree, messages[1][:content][0][:content]
+    assert_equal recent_tree, messages[3][:content][0][:content]
+  end
+
+  private
+
+  def old_tree
+    @old_tree ||= "Element subtree:\n#{"Attributes: Window\n" * 200}"
+  end
+
+  def recent_tree
+    @recent_tree ||= "Element subtree:\n#{"Attributes: Window\n" * 10}"
+  end
+
+  def build_agent_with_trees(compress_threshold:)
+    agent = nil
+    SimulatorLLMPilot::ToolExecutor.stub(:new, FakeExecutor.new) do
       agent = SimulatorLLMPilot::Agent.new(
         test_case: @test_case,
-        config: @config.tap { |config| config.max_context_turns = 1 },
+        config: @config.tap do |config|
+          config.max_context_turns = 1
+          config.compress_context_when_chars_exceed = compress_threshold
+        end,
         wda: FakeWDA.new,
         simulator: FakeSimulator.new,
         llm: FakeLLM.new(responses: []),
@@ -102,8 +134,6 @@ class AgentTest < Minitest::Test
       )
     end
 
-    old_tree = "Element subtree:\n#{"Attributes: Window\n" * 200}"
-    recent_tree = "Element subtree:\n#{"Attributes: Window\n" * 10}"
     agent.instance_variable_set(:@messages, [
                                   { role: 'user', content: 'initial' },
                                   { role: 'user', content: [{ type: 'tool_result', content: old_tree }] },
@@ -111,11 +141,6 @@ class AgentTest < Minitest::Test
                                   { role: 'user', content: [{ type: 'tool_result', content: recent_tree }] },
                                   { role: 'assistant', content: [] }
                                 ])
-
-    agent.send(:compress_old_trees!)
-    messages = agent.instance_variable_get(:@messages)
-
-    assert_includes messages[1][:content][0][:content], 'compressed to save context'
-    assert_equal recent_tree, messages[3][:content][0][:content]
+    agent
   end
 end

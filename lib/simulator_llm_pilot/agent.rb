@@ -276,10 +276,16 @@ module SimulatorLLMPilot
       @config.app_instructions && !@config.app_instructions.strip.empty?
     end
 
-    # Compress accessibility tree content in older tool results to manage
-    # context window size and reduce token cost. Keeps the most recent
-    # trees intact so the model can still reference the current UI state.
+    # Compress accessibility tree content in older tool results, but only once
+    # the conversation grows past a size threshold. Below the threshold the
+    # message history stays append-only, which lets prompt caching re-read prior
+    # turns at the cache rate instead of re-billing them; rewriting old messages
+    # would invalidate that cache. Above the threshold (an unusually long test),
+    # compression kicks in as a context-window safety valve, keeping the most
+    # recent trees intact so the model can still reference the current UI state.
     def compress_old_trees!
+      return if messages_char_size < @config.compress_context_when_chars_exceed
+
       preserve_recent = @config.max_context_turns * 2
       cutoff = @messages.length - preserve_recent
 
@@ -306,6 +312,20 @@ module SimulatorLLMPilot
 
     def accessibility_tree?(text)
       text.include?('Element subtree:') || text.match?(/\AAttributes: Window/)
+    end
+
+    # Rough character count of the conversation, used to decide when the context
+    # is large enough to warrant compressing old trees (see compress_old_trees!).
+    def messages_char_size
+      @messages.sum do |msg|
+        content = msg[:content]
+        case content
+        when String then content.bytesize
+        when Array
+          content.sum { |block| (block[:content] || block[:text] || '').to_s.bytesize }
+        else 0
+        end
+      end
     end
   end
 end

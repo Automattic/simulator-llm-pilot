@@ -139,4 +139,38 @@ class RunnerTest < Minitest::Test
       end
     end
   end
+
+  def test_usage_summary_formats_tokens_cache_hit_rate_and_estimated_cost
+    @config.anthropic_model = 'claude-sonnet-4-6'
+    runner = SimulatorLLMPilot::Runner.new(config: @config, logger: @logger)
+    fake_llm = Struct.new(:usage_totals).new(
+      {
+        requests: 5,
+        input_tokens: 1000,
+        output_tokens: 200,
+        cache_creation_input_tokens: 500,
+        cache_read_input_tokens: 8500
+      }
+    )
+
+    summary = runner.send(:run_usage_summary, fake_llm)
+
+    assert_includes summary, 'requests: 5'
+    assert_includes summary, 'cache read: 8500'
+    assert_includes summary, 'cache hit: 85.0%'
+    assert_includes summary, 'est cost: $'
+  end
+
+  def test_usage_summary_is_nil_without_a_usage_capable_client
+    runner = SimulatorLLMPilot::Runner.new(config: @config, logger: @logger)
+
+    assert_nil runner.send(:run_usage_summary, Object.new)
+  end
+
+  def test_estimated_cost_omits_dollar_figure_for_unknown_model
+    @config.anthropic_model = 'some-other-model'
+    runner = SimulatorLLMPilot::Runner.new(config: @config, logger: @logger)
+
+    assert_nil runner.send(:estimated_cost_usd, input: 1000, output: 1000, cache_write: 0, cache_read: 0)
+  end
 end
