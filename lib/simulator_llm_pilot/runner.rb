@@ -9,13 +9,6 @@ module SimulatorLLMPilot
   # 5. Write results with runner-enforced metadata
   # 6. Stop WDA
   class Runner
-    # Approximate list prices (USD per million tokens) for an at-a-glance cost
-    # estimate in the run summary. Keyed by model-id prefix; unknown models get
-    # token counts only, no dollar figure. Update if Anthropic pricing changes.
-    PRICING_USD_PER_MTOK = {
-      'claude-sonnet-4' => { input: 3.0, output: 15.0, cache_write: 3.75, cache_read: 0.30 }
-    }.freeze
-
     def initialize(config:, logger:)
       @config = config
       @logger = logger
@@ -312,18 +305,7 @@ module SimulatorLLMPilot
       parts << "requests: #{usage[:requests].to_i}" if requests
       parts << "input: #{input} | cache write: #{cache_write} | cache read: #{cache_read} | output: #{output}"
       parts << "cache hit: #{hit_rate}%"
-      cost = estimated_cost_usd(input: input, output: output, cache_write: cache_write, cache_read: cache_read)
-      parts << format('est cost: $%.2f', cost) if cost
       parts.join(' | ')
-    end
-
-    def estimated_cost_usd(input:, output:, cache_write:, cache_read:)
-      prefix = PRICING_USD_PER_MTOK.keys.find { |key| @config.anthropic_model.to_s.start_with?(key) }
-      return nil unless prefix
-
-      price = PRICING_USD_PER_MTOK[prefix]
-      ((input * price[:input]) + (output * price[:output]) +
-        (cache_write * price[:cache_write]) + (cache_read * price[:cache_read])) / 1_000_000.0
     end
   end
 end

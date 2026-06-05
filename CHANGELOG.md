@@ -14,8 +14,9 @@ _None_
   Anthropic request (`cache_control`), so the agent loop re-reads prior turns at
   the cache rate instead of re-billing them at full price each turn. This is the
   dominant cost driver for multi-turn runs.
-- Report token usage and an estimated cost per test and per run (input, cache
-  write/read, output, cache-hit rate) in the console summary and `results.md`.
+- Report token usage per test and per run (input, cache write/read, output,
+  cache-hit rate) in the console summary and `results.md`, so cost is
+  attributable and the effect of caching is measurable.
 
 ### Bug Fixes
 
