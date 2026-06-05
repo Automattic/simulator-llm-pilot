@@ -44,6 +44,7 @@ module SimulatorLLMPilot
                when 'get_accessibility_tree' then exec_get_tree
                when 'tap'                    then exec_tap(input)
                when 'tap_element'            then exec_tap_element(input)
+               when 'tap_and_wait'           then exec_tap_and_wait(input)
                when 'swipe'                  then exec_swipe(input)
                when 'type_text'              then exec_type_text(input)
                when 'clear_text'             then exec_clear_text
@@ -118,6 +119,45 @@ module SimulatorLLMPilot
       target = identifier || label
       @logger.info "  Tapped element '#{target}'"
       "Tapped element: #{target}"
+    end
+
+    # Tap and return the resulting accessibility tree in one tool call, so the
+    # common "tap then read the screen" step costs one turn instead of two.
+    def exec_tap_and_wait(input)
+      status = perform_tap(input)
+      tree = settle_and_read_tree(input)
+      "#{status}\n\n#{tree}"
+    end
+
+    def perform_tap(input)
+      identifier = present_string(input['identifier'])
+      label = present_string(input['label'])
+      x = input['x']
+      y = input['y']
+
+      return exec_tap_element(input) if identifier || label
+      return exec_tap(input) if x && y
+
+      raise "tap_and_wait requires 'identifier', 'label', or both 'x' and 'y'"
+    end
+
+    # Read the tree once; if a wait_for marker was given, keep re-reading until
+    # it appears in the tree or the timeout elapses, so the returned tree
+    # reflects the screen after the tap has taken effect.
+    def settle_and_read_tree(input)
+      marker = present_string(input['wait_for'])
+      deadline = Time.now + clamp_wait_timeout(input['timeout_seconds'])
+
+      tree = exec_get_tree
+      while marker && !tree.include?(marker) && Time.now < deadline
+        sleep 0.3
+        tree = exec_get_tree
+      end
+      tree
+    end
+
+    def clamp_wait_timeout(seconds)
+      [[(seconds || 3).to_f, 10].min, 0.5].max
     end
 
     def exec_swipe(input)

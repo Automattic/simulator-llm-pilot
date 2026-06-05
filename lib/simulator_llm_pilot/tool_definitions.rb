@@ -46,6 +46,31 @@ module SimulatorLLMPilot
           }
         },
         {
+          name: 'tap_and_wait',
+          description: 'Tap an element (by identifier/label) or coordinates AND return the resulting ' \
+                       'accessibility tree in one step. Prefer this over a separate tap + ' \
+                       'get_accessibility_tree — it saves a turn. Optionally pass wait_for (an identifier ' \
+                       'or label you expect on the resulting screen) to keep re-reading until it appears.',
+          input_schema: {
+            type: 'object',
+            properties: {
+              identifier: { type: 'string', description: 'Accessibility identifier of the element to tap' },
+              label: { type: 'string', description: 'Accessibility label of the element to tap' },
+              x: { type: 'number', description: 'X coordinate to tap (use instead of identifier/label)' },
+              y: { type: 'number', description: 'Y coordinate to tap (use together with x)' },
+              wait_for: {
+                type: 'string',
+                description: 'Identifier or label expected on the resulting screen; waits until it appears'
+              },
+              timeout_seconds: {
+                type: 'number',
+                description: 'Max seconds to wait for wait_for (0.5 to 10, default 3)'
+              }
+            },
+            required: []
+          }
+        },
+        {
           name: 'swipe',
           description: 'Swipe from one point to another. For scrolling DOWN (reveal content below): ' \
                        'swipe from lower y to upper y. For scrolling UP (reveal content above): swipe ' \

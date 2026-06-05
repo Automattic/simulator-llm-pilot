@@ -42,6 +42,58 @@ class ToolExecutorTest < Minitest::Test
     assert_includes @wda.calls, [:click_element, 'element-123']
   end
 
+  def test_tap_and_wait_taps_element_and_returns_the_tree
+    @wda.set_find_element_result(using: 'accessibility id', value: 'create-post-button', result: 'el-1')
+    @wda.tree = "Element subtree:\npost-title-field"
+
+    result = @executor.execute('tap_and_wait', { 'identifier' => 'create-post-button' })
+
+    assert_includes result, 'Tapped element: create-post-button'
+    assert_includes result, 'post-title-field'
+    assert_includes @wda.calls, [:click_element, 'el-1']
+    assert_equal(1, @wda.calls.count { |call| call.first == :get_tree })
+  end
+
+  def test_tap_and_wait_supports_coordinates
+    @wda.tree = "Element subtree:\nsome-screen"
+
+    result = @executor.execute('tap_and_wait', { 'x' => 100, 'y' => 200 })
+
+    assert_includes result, 'Tapped at (100, 200)'
+    assert_includes result, 'some-screen'
+    assert_includes @wda.calls, [:tap_at, 100, 200]
+  end
+
+  def test_tap_and_wait_returns_as_soon_as_the_marker_is_present
+    @wda.set_find_element_result(using: 'accessibility id', value: 'open', result: 'el-9')
+    @wda.tree = "Element subtree:\nready-marker visible"
+
+    result = @executor.execute('tap_and_wait', { 'identifier' => 'open', 'wait_for' => 'ready-marker' })
+
+    assert_includes result, 'ready-marker'
+    assert_equal(1, @wda.calls.count { |call| call.first == :get_tree })
+  end
+
+  def test_tap_and_wait_polls_until_timeout_when_the_marker_never_appears
+    @wda.set_find_element_result(using: 'accessibility id', value: 'open', result: 'el-9')
+    @wda.tree = "Element subtree:\nno-marker-here"
+
+    result = @executor.execute(
+      'tap_and_wait',
+      { 'identifier' => 'open', 'wait_for' => 'absent', 'timeout_seconds' => 0.5 }
+    )
+
+    assert_includes result, 'no-marker-here'
+    assert_operator @wda.calls.count { |call| call.first == :get_tree }, :>=, 2
+  end
+
+  def test_tap_and_wait_requires_a_target
+    result = @executor.execute('tap_and_wait', {})
+
+    assert_match(/\AError:/, result)
+    assert_includes result, "requires 'identifier'"
+  end
+
   def test_rest_api_tracks_usage_by_purpose_and_success
     response = fake_response(code: 200, body: '{"id": 101}')
     http = FakeHTTPTransport.new(response: response)

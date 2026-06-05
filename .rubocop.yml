@@ -33,8 +33,10 @@ Metrics/BlockLength:
 Metrics/ClassLength:
   Max: 300
 
+# ToolDefinitions.all is a single declarative list of tool schemas that grows
+# as tools are added; keep the limit ahead of it rather than splitting the list.
 Metrics/MethodLength:
-  Max: 160
+  Max: 200
 
 Metrics/ModuleLength:
   Max: 300
