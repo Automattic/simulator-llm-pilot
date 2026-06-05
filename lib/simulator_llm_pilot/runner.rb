@@ -228,7 +228,7 @@ module SimulatorLLMPilot
         lines << "Verification: #{section_state(result[:verification_expected], result[:verification_ran], result[:verification_satisfied])}"
         lines << "Cleanup: #{section_state(result[:cleanup_expected], result[:cleanup_ran], result[:cleanup_satisfied])}"
         lines << "Tools: #{format_tool_usage(result[:tool_usage])}"
-        lines << "Tokens: #{format_usage(result[:usage])}" if result[:usage]
+        lines << "Tokens: #{format_usage(result[:usage])}" if usage_recorded?(result[:usage])
         lines << "Runner enforcement: #{result[:enforced_failures].join('; ')}" if result[:enforced_failures]&.any?
         lines << ''
       end
@@ -280,6 +280,12 @@ module SimulatorLLMPilot
       return nil if before.nil? || after.nil?
 
       (before.keys | after.keys).to_h { |key| [key, after[key].to_i - before[key].to_i] }
+    end
+
+    # True only when the test actually made LLM requests, so we don't print a
+    # misleading "Tokens: n/a" line for tests that failed before any LLM call.
+    def usage_recorded?(usage)
+      usage.is_a?(Hash) && usage[:requests].to_i.positive?
     end
 
     def run_usage_summary(llm)

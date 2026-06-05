@@ -284,7 +284,8 @@ module SimulatorLLMPilot
     # compression kicks in as a context-window safety valve, keeping the most
     # recent trees intact so the model can still reference the current UI state.
     def compress_old_trees!
-      return if messages_char_size < @config.compress_context_when_chars_exceed
+      threshold = @config.compress_context_when_chars_exceed
+      return if threshold.nil? || messages_char_size < threshold
 
       preserve_recent = @config.max_context_turns * 2
       cutoff = @messages.length - preserve_recent

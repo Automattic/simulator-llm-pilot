@@ -117,6 +117,17 @@ class AgentTest < Minitest::Test
     assert_operator agent.send(:messages_char_size), :>=, 5000
   end
 
+  def test_nil_compression_threshold_means_never_compress
+    agent = build_agent_with_trees(compress_threshold: nil)
+
+    agent.send(:compress_old_trees!) # must not raise on Integer < nil
+
+    messages = agent.instance_variable_get(:@messages)
+
+    assert_equal old_tree, messages[1][:content][0][:content]
+    assert_equal recent_tree, messages[3][:content][0][:content]
+  end
+
   private
 
   def old_tree

@@ -165,4 +165,13 @@ class RunnerTest < Minitest::Test
 
     assert_nil runner.send(:run_usage_summary, Object.new)
   end
+
+  def test_usage_recorded_only_when_requests_were_made
+    runner = SimulatorLLMPilot::Runner.new(config: @config, logger: @logger)
+
+    assert runner.send(:usage_recorded?, { requests: 2, input_tokens: 10 })
+    refute runner.send(:usage_recorded?, {})
+    refute runner.send(:usage_recorded?, { requests: 0 })
+    refute runner.send(:usage_recorded?, nil)
+  end
 end
