@@ -47,10 +47,12 @@ module SimulatorLLMPilot
         },
         {
           name: 'tap_and_wait',
-          description: 'Tap an element (by identifier/label) or coordinates AND return the resulting ' \
-                       'accessibility tree in one step. Prefer this over a separate tap + ' \
-                       'get_accessibility_tree — it saves a turn. Optionally pass wait_for (an identifier ' \
-                       'or label you expect on the resulting screen) to keep re-reading until it appears.',
+          description: 'Tap a target and return the resulting accessibility tree in one call. Prefer this ' \
+                       'over a separate tap + get_accessibility_tree — it returns the post-tap tree, so do ' \
+                       'NOT call get_accessibility_tree afterwards. You MUST provide a target: identifier ' \
+                       'or label to tap an element, or both x and y to tap coordinates. Optionally pass ' \
+                       'wait_for (an identifier or label you expect on the resulting screen) to keep ' \
+                       're-reading the tree until it appears, up to timeout_seconds.',
           input_schema: {
             type: 'object',
             properties: {

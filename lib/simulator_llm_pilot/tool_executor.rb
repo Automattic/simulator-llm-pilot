@@ -143,14 +143,19 @@ module SimulatorLLMPilot
 
     # Read the tree once; if a wait_for marker was given, keep re-reading until
     # it appears in the tree or the timeout elapses, so the returned tree
-    # reflects the screen after the tap has taken effect.
+    # reflects the screen after the tap has taken effect. Uses a monotonic clock
+    # and never sleeps past the deadline, so the wait honors timeout_seconds.
     def settle_and_read_tree(input)
       marker = present_string(input['wait_for'])
-      deadline = Time.now + clamp_wait_timeout(input['timeout_seconds'])
-
       tree = exec_get_tree
-      while marker && !tree.include?(marker) && Time.now < deadline
-        sleep 0.3
+      return tree unless marker
+
+      deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + clamp_wait_timeout(input['timeout_seconds'])
+      until tree.include?(marker)
+        remaining = deadline - Process.clock_gettime(Process::CLOCK_MONOTONIC)
+        break unless remaining.positive?
+
+        sleep [remaining, 0.3].min
         tree = exec_get_tree
       end
       tree
