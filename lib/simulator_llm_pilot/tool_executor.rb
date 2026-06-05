@@ -168,9 +168,10 @@ module SimulatorLLMPilot
     def settle_and_read_tree(input, previous_tree:)
       marker = present_string(input['wait_for'])
       timeout_seconds = marker ? clamp_wait_timeout(input['timeout_seconds']) : DEFAULT_TREE_CHANGE_TIMEOUT_SECONDS
+      previous_comparable_tree = marker || previous_tree.nil? ? nil : comparable_tree(previous_tree)
       tree = exec_get_tree
       deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + timeout_seconds
-      until tree_settled?(tree, marker, previous_tree)
+      until tree_settled?(tree, marker, previous_comparable_tree)
         remaining = deadline - Process.clock_gettime(Process::CLOCK_MONOTONIC)
         break unless remaining.positive?
 
@@ -180,8 +181,8 @@ module SimulatorLLMPilot
       tree
     end
 
-    def tree_settled?(tree, marker, previous_tree)
-      marker ? tree.include?(marker) : previous_tree.nil? || comparable_tree(tree) != comparable_tree(previous_tree)
+    def tree_settled?(tree, marker, previous_comparable_tree)
+      marker ? tree.include?(marker) : previous_comparable_tree.nil? || comparable_tree(tree) != previous_comparable_tree
     end
 
     def comparable_tree(tree)
