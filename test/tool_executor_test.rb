@@ -74,14 +74,14 @@ class ToolExecutorTest < Minitest::Test
   def test_tap_and_wait_without_marker_polls_until_tree_changes
     @wda.set_find_element_result(using: 'accessibility id', value: 'open', result: 'el-9')
     use_tree_sequence(
-      "Element subtree:\nbefore",
-      "Element subtree:\nbefore",
-      "Element subtree:\nafter"
+      "Element subtree:\nButton, 0x111111, {{0, 0}, {10, 10}}, label: 'Open'",
+      "Element subtree:\nButton, 0x222222, {{0, 0}, {10, 10}}, label: 'Open'",
+      "Element subtree:\nStaticText, 0x333333, {{0, 0}, {10, 10}}, label: 'Done'"
     )
 
     result = @executor.execute('tap_and_wait', { 'identifier' => 'open' })
 
-    assert_includes result, 'after'
+    assert_includes result, "label: 'Done'"
     assert_equal(3, @wda.calls.count { |call| call.first == :get_tree })
   end
 

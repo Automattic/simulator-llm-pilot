@@ -11,6 +11,7 @@ module SimulatorLLMPilot
     POLL_INTERVAL_SECONDS = 0.3
     # Hint appended when a tap_element lookup fails. tap_and_wait swaps it for a
     # tree-aware version since it already returns the accessibility tree below.
+    ELEMENT_NOT_FOUND_PREFIX = 'Element not found:'
     TAP_BY_COORDINATES_HINT = 'Use get_accessibility_tree and tap by coordinates instead.'
 
     attr_reader :test_completed, :test_status, :test_reason,
@@ -117,7 +118,7 @@ module SimulatorLLMPilot
 
       if element_id.nil?
         target = identifier || label || '(no identifier or label provided)'
-        return "Element not found: #{target}. #{TAP_BY_COORDINATES_HINT}"
+        return "#{ELEMENT_NOT_FOUND_PREFIX} #{target}. #{TAP_BY_COORDINATES_HINT}"
       end
 
       @wda.click_element(element_id)
@@ -129,7 +130,7 @@ module SimulatorLLMPilot
     # Tap and return the resulting accessibility tree in one tool call, so the
     # common "tap then read the screen" step costs one turn instead of two.
     def exec_tap_and_wait(input)
-      validate_tap_and_wait_target!(input)
+      raise "tap_and_wait requires 'identifier', 'label', or both 'x' and 'y'" unless present_string(input['identifier']) || present_string(input['label']) || (input['x'] && input['y'])
 
       previous_tree = present_string(input['wait_for']) ? nil : exec_get_tree
       status, tapped = perform_tap(input)
@@ -153,18 +154,10 @@ module SimulatorLLMPilot
 
       if identifier || label
         status = exec_tap_element(input)
-        return [status, !status.start_with?('Element not found:')]
+        return [status, !status.start_with?(ELEMENT_NOT_FOUND_PREFIX)]
       end
-      return [exec_tap(input), true] if x && y
 
-      raise "tap_and_wait requires 'identifier', 'label', or both 'x' and 'y'"
-    end
-
-    def validate_tap_and_wait_target!(input)
-      return if present_string(input['identifier']) || present_string(input['label'])
-      return if input['x'] && input['y']
-
-      raise "tap_and_wait requires 'identifier', 'label', or both 'x' and 'y'"
+      [exec_tap(input), true] if x && y
     end
 
     # Read the tree once; if a wait_for marker was given, keep re-reading until
@@ -188,7 +181,11 @@ module SimulatorLLMPilot
     end
 
     def tree_settled?(tree, marker, previous_tree)
-      marker ? tree.include?(marker) : previous_tree.nil? || tree != previous_tree
+      marker ? tree.include?(marker) : previous_tree.nil? || comparable_tree(tree) != comparable_tree(previous_tree)
+    end
+
+    def comparable_tree(tree)
+      tree.gsub(/0x[0-9a-fA-F]+\b/, '0xADDR')
     end
 
     def clamp_wait_timeout(seconds)
