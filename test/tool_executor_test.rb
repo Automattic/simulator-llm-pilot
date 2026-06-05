@@ -42,26 +42,47 @@ class ToolExecutorTest < Minitest::Test
     assert_includes @wda.calls, [:click_element, 'element-123']
   end
 
-  def test_tap_and_wait_taps_element_and_returns_the_tree
+  def test_tap_and_wait_taps_element_and_returns_the_changed_tree
     @wda.set_find_element_result(using: 'accessibility id', value: 'create-post-button', result: 'el-1')
-    @wda.tree = "Element subtree:\npost-title-field"
+    use_tree_sequence(
+      "Element subtree:\nold-screen",
+      "Element subtree:\npost-title-field"
+    )
 
     result = @executor.execute('tap_and_wait', { 'identifier' => 'create-post-button' })
 
     assert_includes result, 'Tapped element: create-post-button'
     assert_includes result, 'post-title-field'
+    refute_includes result, 'old-screen'
     assert_includes @wda.calls, [:click_element, 'el-1']
-    assert_equal(1, @wda.calls.count { |call| call.first == :get_tree })
+    assert_equal(2, @wda.calls.count { |call| call.first == :get_tree })
   end
 
   def test_tap_and_wait_supports_coordinates
-    @wda.tree = "Element subtree:\nsome-screen"
+    use_tree_sequence(
+      "Element subtree:\nold-screen",
+      "Element subtree:\nsome-screen"
+    )
 
     result = @executor.execute('tap_and_wait', { 'x' => 100, 'y' => 200 })
 
     assert_includes result, 'Tapped at (100, 200)'
     assert_includes result, 'some-screen'
     assert_includes @wda.calls, [:tap_at, 100, 200]
+  end
+
+  def test_tap_and_wait_without_marker_polls_until_tree_changes
+    @wda.set_find_element_result(using: 'accessibility id', value: 'open', result: 'el-9')
+    use_tree_sequence(
+      "Element subtree:\nbefore",
+      "Element subtree:\nbefore",
+      "Element subtree:\nafter"
+    )
+
+    result = @executor.execute('tap_and_wait', { 'identifier' => 'open' })
+
+    assert_includes result, 'after'
+    assert_equal(3, @wda.calls.count { |call| call.first == :get_tree })
   end
 
   def test_tap_and_wait_returns_as_soon_as_the_marker_is_present
@@ -207,5 +228,16 @@ class ToolExecutorTest < Minitest::Test
 
   def test_label_predicate_returns_nil_for_nil_labels
     assert_nil @executor.send(:label_predicate, nil)
+  end
+
+  private
+
+  def use_tree_sequence(*trees)
+    sequence = trees.dup
+    fallback = trees.last
+    @wda.define_singleton_method(:get_tree) do |format:|
+      @calls << [:get_tree, format]
+      sequence.empty? ? fallback : sequence.shift
+    end
   end
 end

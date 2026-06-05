@@ -7,6 +7,8 @@ module SimulatorLLMPilot
   # This is the enforcement layer — only these operations are possible.
   class ToolExecutor
     MAX_REST_RESPONSE_CHARS = 2_000
+    DEFAULT_TREE_CHANGE_TIMEOUT_SECONDS = 0.8
+    POLL_INTERVAL_SECONDS = 0.3
     # Hint appended when a tap_element lookup fails. tap_and_wait swaps it for a
     # tree-aware version since it already returns the accessibility tree below.
     TAP_BY_COORDINATES_HINT = 'Use get_accessibility_tree and tap by coordinates instead.'
@@ -127,8 +129,16 @@ module SimulatorLLMPilot
     # Tap and return the resulting accessibility tree in one tool call, so the
     # common "tap then read the screen" step costs one turn instead of two.
     def exec_tap_and_wait(input)
-      status = perform_tap(input)
-      tree = settle_and_read_tree(input)
+      validate_tap_and_wait_target!(input)
+
+      previous_tree = present_string(input['wait_for']) ? nil : exec_get_tree
+      status, tapped = perform_tap(input)
+      tree = if tapped
+               settle_and_read_tree(input, previous_tree: previous_tree)
+             else
+               previous_tree || exec_get_tree
+             end
+
       # If the element wasn't found, the tree is already included below, so point
       # the model at it instead of telling it to fetch the tree (a wasted turn).
       status = status.sub(TAP_BY_COORDINATES_HINT, 'Find the target in the accessibility tree below and tap by coordinates instead.')
@@ -141,30 +151,44 @@ module SimulatorLLMPilot
       x = input['x']
       y = input['y']
 
-      return exec_tap_element(input) if identifier || label
-      return exec_tap(input) if x && y
+      if identifier || label
+        status = exec_tap_element(input)
+        return [status, !status.start_with?('Element not found:')]
+      end
+      return [exec_tap(input), true] if x && y
+
+      raise "tap_and_wait requires 'identifier', 'label', or both 'x' and 'y'"
+    end
+
+    def validate_tap_and_wait_target!(input)
+      return if present_string(input['identifier']) || present_string(input['label'])
+      return if input['x'] && input['y']
 
       raise "tap_and_wait requires 'identifier', 'label', or both 'x' and 'y'"
     end
 
     # Read the tree once; if a wait_for marker was given, keep re-reading until
-    # it appears in the tree or the timeout elapses, so the returned tree
-    # reflects the screen after the tap has taken effect. Uses a monotonic clock
-    # and never sleeps past the deadline, so the wait honors timeout_seconds.
-    def settle_and_read_tree(input)
+    # it appears. Without a marker, briefly wait for the tree to change from the
+    # pre-tap state. This keeps tap_and_wait from returning the stale screen that
+    # the old tap + next-turn get_accessibility_tree pattern naturally avoided.
+    # Uses a monotonic clock and never sleeps past the deadline.
+    def settle_and_read_tree(input, previous_tree:)
       marker = present_string(input['wait_for'])
+      timeout_seconds = marker ? clamp_wait_timeout(input['timeout_seconds']) : DEFAULT_TREE_CHANGE_TIMEOUT_SECONDS
       tree = exec_get_tree
-      return tree unless marker
-
-      deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + clamp_wait_timeout(input['timeout_seconds'])
-      until tree.include?(marker)
+      deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + timeout_seconds
+      until tree_settled?(tree, marker, previous_tree)
         remaining = deadline - Process.clock_gettime(Process::CLOCK_MONOTONIC)
         break unless remaining.positive?
 
-        sleep [remaining, 0.3].min
+        sleep [remaining, POLL_INTERVAL_SECONDS].min
         tree = exec_get_tree
       end
       tree
+    end
+
+    def tree_settled?(tree, marker, previous_tree)
+      marker ? tree.include?(marker) : previous_tree.nil? || tree != previous_tree
     end
 
     def clamp_wait_timeout(seconds)

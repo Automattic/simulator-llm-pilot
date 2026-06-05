@@ -53,7 +53,8 @@ module SimulatorLLMPilot
                        'NOT call get_accessibility_tree afterwards. You MUST provide a target: identifier ' \
                        'or label to tap an element, or both x and y to tap coordinates. Optionally pass ' \
                        'wait_for (an identifier or label you expect on the resulting screen) to keep ' \
-                       're-reading the tree until it appears, up to timeout_seconds.',
+                       're-reading the tree until it appears, up to timeout_seconds. Without wait_for, it ' \
+                       'waits briefly for the accessibility tree to change before returning.',
           input_schema: {
             type: 'object',
             properties: {
