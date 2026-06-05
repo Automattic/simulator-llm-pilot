@@ -314,17 +314,15 @@ module SimulatorLLMPilot
       text.include?('Element subtree:') || text.match?(/\AAttributes: Window/)
     end
 
-    # Rough character count of the conversation, used to decide when the context
-    # is large enough to warrant compressing old trees (see compress_old_trees!).
+    # Rough byte count of the conversation, used to decide when the context is
+    # large enough to warrant compressing old trees (see compress_old_trees!).
+    # Non-string content is serialized so every block is counted regardless of
+    # whether its keys are symbols (tool results we build) or strings (assistant
+    # blocks from JSON.parse), and so tool_use inputs are included too.
     def messages_char_size
       @messages.sum do |msg|
         content = msg[:content]
-        case content
-        when String then content.bytesize
-        when Array
-          content.sum { |block| (block[:content] || block[:text] || '').to_s.bytesize }
-        else 0
-        end
+        content.is_a?(String) ? content.bytesize : JSON.generate(content).bytesize
       end
     end
   end

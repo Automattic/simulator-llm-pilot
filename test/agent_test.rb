@@ -108,6 +108,15 @@ class AgentTest < Minitest::Test
     assert_equal recent_tree, messages[3][:content][0][:content]
   end
 
+  def test_messages_char_size_counts_string_keyed_assistant_blocks
+    agent = build_agent_with_trees(compress_threshold: 0)
+    agent.instance_variable_set(:@messages, [
+                                  { role: 'assistant', content: [{ 'type' => 'text', 'text' => 'x' * 5000 }] }
+                                ])
+
+    assert_operator agent.send(:messages_char_size), :>=, 5000
+  end
+
   private
 
   def old_tree
