@@ -11,7 +11,8 @@ module SimulatorLLMPilot
           description: 'Get the current accessibility tree of the app UI in compact text format. ' \
                        'Each line shows: Type, address, frame {{x, y}, {width, height}}, and optional ' \
                        'identifier/label. Use this to understand the screen and find elements to interact with. ' \
-                       'ALWAYS call this after every action to verify the UI updated.',
+                       'Call it after a swipe or type_text to verify the UI updated; you do NOT need it after ' \
+                       'tap_and_wait, which already returns the updated tree.',
           input_schema: {
             type: 'object',
             properties: {},

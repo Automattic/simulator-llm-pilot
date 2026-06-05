@@ -7,6 +7,9 @@ module SimulatorLLMPilot
   # This is the enforcement layer — only these operations are possible.
   class ToolExecutor
     MAX_REST_RESPONSE_CHARS = 2_000
+    # Hint appended when a tap_element lookup fails. tap_and_wait swaps it for a
+    # tree-aware version since it already returns the accessibility tree below.
+    TAP_BY_COORDINATES_HINT = 'Use get_accessibility_tree and tap by coordinates instead.'
 
     attr_reader :test_completed, :test_status, :test_reason,
                 :total_infra_errors, :consecutive_infra_errors,
@@ -112,7 +115,7 @@ module SimulatorLLMPilot
 
       if element_id.nil?
         target = identifier || label || '(no identifier or label provided)'
-        return "Element not found: #{target}. Use get_accessibility_tree and tap by coordinates instead."
+        return "Element not found: #{target}. #{TAP_BY_COORDINATES_HINT}"
       end
 
       @wda.click_element(element_id)
@@ -126,6 +129,9 @@ module SimulatorLLMPilot
     def exec_tap_and_wait(input)
       status = perform_tap(input)
       tree = settle_and_read_tree(input)
+      # If the element wasn't found, the tree is already included below, so point
+      # the model at it instead of telling it to fetch the tree (a wasted turn).
+      status = status.sub(TAP_BY_COORDINATES_HINT, 'Find the target in the accessibility tree below and tap by coordinates instead.')
       "#{status}\n\n#{tree}"
     end
 

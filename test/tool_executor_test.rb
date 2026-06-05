@@ -94,6 +94,17 @@ class ToolExecutorTest < Minitest::Test
     assert_includes result, "requires 'identifier'"
   end
 
+  def test_tap_and_wait_failure_points_to_the_returned_tree
+    @wda.tree = "Element subtree:\ncurrent-screen"
+    # find_element returns nil by default, so the element is not found.
+    result = @executor.execute('tap_and_wait', { 'identifier' => 'missing-button' })
+
+    assert_includes result, 'Element not found: missing-button'
+    assert_includes result, 'current-screen'           # the tree is returned in the same call
+    assert_includes result, 'accessibility tree below' # points at that tree...
+    refute_includes result, 'get_accessibility_tree'   # ...not a redundant separate call
+  end
+
   def test_rest_api_tracks_usage_by_purpose_and_success
     response = fake_response(code: 200, body: '{"id": 101}')
     http = FakeHTTPTransport.new(response: response)

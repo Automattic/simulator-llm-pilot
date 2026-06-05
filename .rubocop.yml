@@ -30,8 +30,10 @@ Metrics/BlockLength:
   Exclude:
    - test/**/*_test.rb
 
+# ToolExecutor gains an exec_ method per tool, so the central dispatcher grows
+# as tools are added; keep the limit ahead of it rather than splitting it up.
 Metrics/ClassLength:
-  Max: 300
+  Max: 320
 
 # ToolDefinitions.all is a single declarative list of tool schemas that grows
 # as tools are added; keep the limit ahead of it rather than splitting the list.
