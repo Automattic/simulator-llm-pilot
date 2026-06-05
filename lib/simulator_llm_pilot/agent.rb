@@ -276,10 +276,17 @@ module SimulatorLLMPilot
       @config.app_instructions && !@config.app_instructions.strip.empty?
     end
 
-    # Compress accessibility tree content in older tool results to manage
-    # context window size and reduce token cost. Keeps the most recent
-    # trees intact so the model can still reference the current UI state.
+    # Compress accessibility tree content in older tool results, but only once
+    # the conversation grows past a size threshold. Below the threshold the
+    # message history stays append-only, which lets prompt caching re-read prior
+    # turns at the cache rate instead of re-billing them; rewriting old messages
+    # would invalidate that cache. Above the threshold (an unusually long test),
+    # compression kicks in as a context-window safety valve, keeping the most
+    # recent trees intact so the model can still reference the current UI state.
     def compress_old_trees!
+      threshold = @config.compress_context_when_chars_exceed
+      return if threshold.nil? || messages_char_size < threshold
+
       preserve_recent = @config.max_context_turns * 2
       cutoff = @messages.length - preserve_recent
 
@@ -306,6 +313,18 @@ module SimulatorLLMPilot
 
     def accessibility_tree?(text)
       text.include?('Element subtree:') || text.match?(/\AAttributes: Window/)
+    end
+
+    # Rough byte count of the conversation, used to decide when the context is
+    # large enough to warrant compressing old trees (see compress_old_trees!).
+    # Non-string content is serialized so every block is counted regardless of
+    # whether its keys are symbols (tool results we build) or strings (assistant
+    # blocks from JSON.parse), and so tool_use inputs are included too.
+    def messages_char_size
+      @messages.sum do |msg|
+        content = msg[:content]
+        content.is_a?(String) ? content.bytesize : JSON.generate(content).bytesize
+      end
     end
   end
 end

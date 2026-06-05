@@ -139,4 +139,39 @@ class RunnerTest < Minitest::Test
       end
     end
   end
+
+  def test_usage_summary_formats_tokens_and_cache_hit_rate
+    runner = SimulatorLLMPilot::Runner.new(config: @config, logger: @logger)
+    fake_llm = Struct.new(:usage_totals).new(
+      {
+        requests: 5,
+        input_tokens: 1000,
+        output_tokens: 200,
+        cache_creation_input_tokens: 500,
+        cache_read_input_tokens: 8500
+      }
+    )
+
+    summary = runner.send(:run_usage_summary, fake_llm)
+
+    assert_includes summary, 'requests: 5'
+    assert_includes summary, 'cache read: 8500'
+    assert_includes summary, 'cache hit: 85.0%'
+    refute_includes summary, '$'
+  end
+
+  def test_usage_summary_is_nil_without_a_usage_capable_client
+    runner = SimulatorLLMPilot::Runner.new(config: @config, logger: @logger)
+
+    assert_nil runner.send(:run_usage_summary, Object.new)
+  end
+
+  def test_usage_recorded_only_when_requests_were_made
+    runner = SimulatorLLMPilot::Runner.new(config: @config, logger: @logger)
+
+    assert runner.send(:usage_recorded?, { requests: 2, input_tokens: 10 })
+    refute runner.send(:usage_recorded?, {})
+    refute runner.send(:usage_recorded?, { requests: 0 })
+    refute runner.send(:usage_recorded?, nil)
+  end
 end

@@ -128,6 +128,7 @@ class ToolExecutorTest < Minitest::Test
       _method, udid, path = @simulator.calls.last
 
       expected_path = File.join(@config.screenshots_dir, 'login_error_1-1.png')
+
       assert_equal @config.simulator_udid, udid
       assert_equal expected_path, path
       assert_path_exists @config.screenshots_dir

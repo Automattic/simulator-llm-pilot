@@ -36,8 +36,8 @@ module SimulatorLLMPilot
       )
 
       results = run_tests(test_cases, wda, llm)
-      write_results(results)
-      print_summary(results)
+      write_results(results, llm)
+      print_summary(results, llm)
       results
     ensure
       @wda_lifecycle&.stop
@@ -54,8 +54,10 @@ module SimulatorLLMPilot
 
         reset_app_state!
 
+        usage_before = usage_snapshot(llm)
         result = prepare_session!(wda, test_case)
         result ||= run_test_case(test_case, wda, llm)
+        result[:usage] = usage_delta(usage_before, usage_snapshot(llm))
         result[:test] = test_case.title
         result[:file] = test_case.file_path
 
@@ -193,11 +195,13 @@ module SimulatorLLMPilot
       )
     end
 
-    def write_results(results)
+    def write_results(results, llm = nil)
       passed = results.count { |result| result[:status] == 'pass' }
       failed = results.count { |result| result[:status] == 'fail' }
       infra = results.count { |result| result[:status] == 'infra_error' }
       enforced = results.count { |result| result[:enforced_failures]&.any? }
+
+      usage_line = run_usage_summary(llm)
 
       lines = [
         "# Test Results\n",
@@ -206,9 +210,10 @@ module SimulatorLLMPilot
         "- **Model:** #{@config.anthropic_model}",
         "- **Total:** #{results.length} | **Passed:** #{passed} | **Failed:** #{failed}" \
         "#{" | **Infra errors:** #{infra}" if infra.positive?}" \
-        "#{" | **Enforced failures:** #{enforced}" if enforced.positive?}\n",
-        "## Results\n"
-      ]
+        "#{" | **Enforced failures:** #{enforced}" if enforced.positive?}",
+        ("- **Tokens:** #{usage_line}" if usage_line),
+        "\n## Results\n"
+      ].compact
 
       results.each do |result|
         status_label = case result[:status]
@@ -223,6 +228,7 @@ module SimulatorLLMPilot
         lines << "Verification: #{section_state(result[:verification_expected], result[:verification_ran], result[:verification_satisfied])}"
         lines << "Cleanup: #{section_state(result[:cleanup_expected], result[:cleanup_ran], result[:cleanup_satisfied])}"
         lines << "Tools: #{format_tool_usage(result[:tool_usage])}"
+        lines << "Tokens: #{format_usage(result[:usage])}" if usage_recorded?(result[:usage])
         lines << "Runner enforcement: #{result[:enforced_failures].join('; ')}" if result[:enforced_failures]&.any?
         lines << ''
       end
@@ -232,7 +238,7 @@ module SimulatorLLMPilot
       @logger.info "Results written to #{path}"
     end
 
-    def print_summary(results)
+    def print_summary(results, llm = nil)
       passed = results.count { |result| result[:status] == 'pass' }
       failed = results.count { |result| result[:status] == 'fail' }
       infra = results.count { |result| result[:status] == 'infra_error' }
@@ -244,6 +250,8 @@ module SimulatorLLMPilot
       summary += " | Infra errors: #{infra}" if infra.positive?
       summary += " | Enforced failures: #{enforced}" if enforced.positive?
       @logger.info summary
+      usage_line = run_usage_summary(llm)
+      @logger.info "Tokens: #{usage_line}" if usage_line
       @logger.info "Results: #{@config.results_dir}"
       @logger.info '=' * 60
     end
@@ -260,6 +268,50 @@ module SimulatorLLMPilot
       return 'none' if tool_usage.nil? || tool_usage.empty?
 
       tool_usage.map { |name, count| "#{name}(#{count})" }.join(', ')
+    end
+
+    def usage_snapshot(llm)
+      return nil unless llm.respond_to?(:usage_totals)
+
+      llm.usage_totals.dup
+    end
+
+    def usage_delta(before, after)
+      return nil if before.nil? || after.nil?
+
+      (before.keys | after.keys).to_h { |key| [key, after[key].to_i - before[key].to_i] }
+    end
+
+    # True only when the test actually made LLM requests, so we don't print a
+    # misleading "Tokens: n/a" line for tests that failed before any LLM call.
+    def usage_recorded?(usage)
+      usage.is_a?(Hash) && usage[:requests].to_i.positive?
+    end
+
+    def run_usage_summary(llm)
+      return nil unless llm.respond_to?(:usage_totals)
+
+      totals = llm.usage_totals
+      return nil if totals.nil? || totals.empty?
+
+      format_usage(totals, requests: true)
+    end
+
+    def format_usage(usage, requests: false)
+      return 'n/a' if usage.nil? || usage.empty?
+
+      input = usage[:input_tokens].to_i
+      output = usage[:output_tokens].to_i
+      cache_write = usage[:cache_creation_input_tokens].to_i
+      cache_read = usage[:cache_read_input_tokens].to_i
+      billed_input = input + cache_write + cache_read
+      hit_rate = billed_input.positive? ? (cache_read * 100.0 / billed_input).round(1) : 0.0
+
+      parts = []
+      parts << "requests: #{usage[:requests].to_i}" if requests
+      parts << "input: #{input} | cache write: #{cache_write} | cache read: #{cache_read} | output: #{output}"
+      parts << "cache hit: #{hit_rate}%"
+      parts.join(' | ')
     end
   end
 end

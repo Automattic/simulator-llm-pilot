@@ -10,7 +10,13 @@ _None_
 
 ### New Features
 
-_None_
+- Cache the system prompt, tool schemas, and conversation prefix on every
+  Anthropic request (`cache_control`), so the agent loop re-reads prior turns at
+  the cache rate instead of re-billing them at full price each turn. This is the
+  dominant cost driver for multi-turn runs.
+- Report token usage per test and per run (input, cache write/read, output,
+  cache-hit rate) in the console summary and `results.md`, so cost is
+  attributable and the effect of caching is measurable.
 
 ### Bug Fixes
 
@@ -18,7 +24,10 @@ _None_
 
 ### Internal Changes
 
-_None_
+- Only compress old accessibility trees once the conversation grows past
+  `compress_context_when_chars_exceed`. Below that, history stays append-only so
+  prompt caching keeps hitting; above it, compression acts as a context-window
+  safety valve for unusually long tests.
 
 ## 0.1.0
 
