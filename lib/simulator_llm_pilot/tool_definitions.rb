@@ -11,7 +11,8 @@ module SimulatorLLMPilot
           description: 'Get the current accessibility tree of the app UI in compact text format. ' \
                        'Each line shows: Type, address, frame {{x, y}, {width, height}}, and optional ' \
                        'identifier/label. Use this to understand the screen and find elements to interact with. ' \
-                       'ALWAYS call this after every action to verify the UI updated.',
+                       'Call it after a swipe or type_text to verify the UI updated; you do NOT need it after ' \
+                       'tap_and_wait, which already returns the updated tree.',
           input_schema: {
             type: 'object',
             properties: {},
@@ -41,6 +42,34 @@ module SimulatorLLMPilot
             properties: {
               identifier: { type: 'string', description: 'Accessibility identifier (developer-assigned)' },
               label: { type: 'string', description: 'Accessibility label (visible text)' }
+            },
+            required: []
+          }
+        },
+        {
+          name: 'tap_and_wait',
+          description: 'Tap a target and return the resulting accessibility tree in one call. Prefer this ' \
+                       'over a separate tap + get_accessibility_tree — it returns the post-tap tree, so do ' \
+                       'NOT call get_accessibility_tree afterwards. You MUST provide a target: identifier ' \
+                       'or label to tap an element, or both x and y to tap coordinates. Optionally pass ' \
+                       'wait_for (an identifier or label you expect on the resulting screen) to keep ' \
+                       're-reading the tree until it appears, up to timeout_seconds. Without wait_for, it ' \
+                       'waits briefly for the accessibility tree to change before returning.',
+          input_schema: {
+            type: 'object',
+            properties: {
+              identifier: { type: 'string', description: 'Accessibility identifier of the element to tap' },
+              label: { type: 'string', description: 'Accessibility label of the element to tap' },
+              x: { type: 'number', description: 'X coordinate to tap (use instead of identifier/label)' },
+              y: { type: 'number', description: 'Y coordinate to tap (use together with x)' },
+              wait_for: {
+                type: 'string',
+                description: 'Identifier or label expected on the resulting screen; waits until it appears'
+              },
+              timeout_seconds: {
+                type: 'number',
+                description: 'Max seconds to wait for wait_for (0.5 to 10, default 3)'
+              }
             },
             required: []
           }

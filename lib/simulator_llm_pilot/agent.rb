@@ -21,8 +21,11 @@ module SimulatorLLMPilot
       3. To compute tap coordinates from a frame {{x, y}, {width, height}}:
          tap_x = x + width / 2
          tap_y = y + height / 2
-      4. After EVERY action (tap, swipe, type), call get_accessibility_tree to verify
-         the UI changed as expected before proceeding to the next step.
+      4. Prefer tap_and_wait for taps — it taps and returns the updated accessibility
+         tree in one step, so you do NOT need a separate get_accessibility_tree
+         afterwards. Pass wait_for with an identifier or label you expect on the next
+         screen when you know it. After a swipe or type_text, call get_accessibility_tree
+         to verify the UI changed before proceeding.
       5. If an element isn't visible, scroll down by swiping up from the right edge.
 
       ## Element Finding Priority

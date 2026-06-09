@@ -17,6 +17,10 @@ _None_
 - Report token usage per test and per run (input, cache write/read, output,
   cache-hit rate) in the console summary and `results.md`, so cost is
   attributable and the effect of caching is measurable.
+- Add a `tap_and_wait` tool that taps an element (or coordinates) and returns the
+  resulting accessibility tree in one call, with an optional `wait_for` readiness
+  marker, so the common tap-then-read step costs one turn instead of two. The
+  agent is prompted to prefer it for taps.
 
 ### Bug Fixes
 
