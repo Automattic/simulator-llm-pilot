@@ -230,9 +230,9 @@ module SimulatorLLMPilot
       FileUtils.mkdir_p(dir)
       path = File.join(dir, filename)
 
-      @simulator.screenshot(@config.simulator_udid, path)
-      @logger.info "  Screenshot: #{path}"
-      "Screenshot saved to #{path}"
+      saved_path = @simulator.screenshot(@config.simulator_udid, path)
+      @logger.info "  Screenshot: #{saved_path}"
+      "Screenshot saved to #{saved_path}"
     end
 
     def exec_launch_app
