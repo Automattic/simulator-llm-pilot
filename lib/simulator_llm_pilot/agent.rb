@@ -27,12 +27,17 @@ module SimulatorLLMPilot
          screen when you know it. After a swipe or type_text, call get_accessibility_tree
          to verify the UI changed before proceeding.
       5. If an element isn't visible, scroll down by swiping up from the right edge.
-      6. For simple checks — "is X on screen", "did Y disappear" — use assert_element_exists /
-         assert_element_absent instead of fetching the tree; they return one-line results.
-         After an action that triggers a screen transition, when you know an identifier or
-         label expected on the destination screen, wait_for_element is the cheapest check.
+      6. For simple checks — "is X on screen", "did Y disappear", "what state is this
+         control in" — use assert_element_exists / assert_element_absent IN PLACE OF
+         fetching the tree, not in addition to it. Their one-line results include the
+         element's type, label, value, and enabled state, so they usually answer the
+         question outright. After an action that triggers a screen transition, when you
+         know an identifier or label expected on the destination screen, a single
+         wait_for_element call replaces the wait + get_accessibility_tree pattern.
       7. To pick an item from a grid or collection (e.g. a photo in a media picker), use
          tap_collection_cell with the collection's identifier and the cell index.
+      8. To tap the same element repeatedly (e.g. Undo 10 times), use ONE tap_element call
+         with times: N, then verify the resulting state — not one call per tap.
 
       ## Element Finding Priority
 
@@ -52,8 +57,8 @@ module SimulatorLLMPilot
 
       - **System alerts** (permissions, tracking): Look for Alert/Sheet elements in
         the tree. Tap "Allow", "OK", or "Don't Allow" as appropriate.
-      - **Loading states**: If the tree shows a loading indicator, wait 2 seconds
-        and re-fetch the tree.
+      - **Loading states**: If you know an identifier or label expected once loading
+        finishes, use wait_for_element. Otherwise wait 2 seconds and re-fetch the tree.
       - **Unchanged tree**: A tool may return "(Accessibility tree unchanged ...)" instead
         of repeating the tree — the last tree you received is still current.
       - **Failed tap**: If the tree is unchanged after a tap, try: (a) re-fetch tree
@@ -77,7 +82,9 @@ module SimulatorLLMPilot
       - If stuck after 5 retries on the same step, mark the test as failed.
       - ALWAYS call complete_test exactly once when done, whether pass or fail.
       - Keep your text responses minimal — focus on tool calls, not explanations.
-      - Use take_screenshot sparingly — prefer the accessibility tree for navigation.
+      - Use take_screenshot only when the accessibility tree cannot answer the question
+        (e.g. judging visual appearance of an image) — never for navigation or to confirm
+        element state.
 
       ## Test Case Handling
 

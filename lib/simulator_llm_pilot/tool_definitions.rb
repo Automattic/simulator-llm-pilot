@@ -12,7 +12,8 @@ module SimulatorLLMPilot
                        'Each line shows: Type, address, frame {{x, y}, {width, height}}, and optional ' \
                        'identifier/label. Use this to understand the screen and find elements to interact with. ' \
                        'Call it after a swipe or type_text to verify the UI updated; you do NOT need it after ' \
-                       'tap_and_wait, which already returns the updated tree.',
+                       'tap_and_wait, which already returns the updated tree. If you only need one element\'s ' \
+                       'presence or state, prefer assert_element_exists — it is much cheaper than the full tree.',
           input_schema: {
             type: 'object',
             properties: {},
@@ -22,12 +23,17 @@ module SimulatorLLMPilot
         {
           name: 'tap',
           description: 'Tap at specific screen coordinates. To compute coordinates from the accessibility tree ' \
-                       'frame {{x, y}, {width, height}}: tap_x = x + width/2, tap_y = y + height/2.',
+                       'frame {{x, y}, {width, height}}: tap_x = x + width/2, tap_y = y + height/2. ' \
+                       'To tap the same point repeatedly, pass times instead of issuing one call per tap.',
           input_schema: {
             type: 'object',
             properties: {
               x: { type: 'number', description: 'X coordinate' },
-              y: { type: 'number', description: 'Y coordinate' }
+              y: { type: 'number', description: 'Y coordinate' },
+              times: {
+                type: 'number',
+                description: 'Number of sequential taps with a short pause between them (default: 1, max: 30)'
+              }
             },
             required: %w[x y]
           }
@@ -36,12 +42,18 @@ module SimulatorLLMPilot
           name: 'tap_element',
           description: 'Find an element by accessibility identifier or label and tap it. ' \
                        'More reliable than coordinate-based tapping when an element has a stable ID. ' \
-                       'Provide identifier, label, or both (identifier is tried first).',
+                       'Provide identifier, label, or both (identifier is tried first). When a step ' \
+                       'requires tapping the same element repeatedly (e.g. Undo 10 times), pass times ' \
+                       'in ONE call instead of issuing one call per tap, then verify the resulting state.',
           input_schema: {
             type: 'object',
             properties: {
               identifier: { type: 'string', description: 'Accessibility identifier (developer-assigned)' },
-              label: { type: 'string', description: 'Accessibility label (visible text)' }
+              label: { type: 'string', description: 'Accessibility label (visible text)' },
+              times: {
+                type: 'number',
+                description: 'Number of sequential taps with a short pause between them (default: 1, max: 30)'
+              }
             },
             required: []
           }
@@ -94,12 +106,14 @@ module SimulatorLLMPilot
         },
         {
           name: 'assert_element_exists',
-          description: 'Check that an element is currently on screen and return a one-line result. ' \
-                       'Use this for verification steps when you know the identifier or label — much ' \
-                       'cheaper than reading the full accessibility tree. Provide identifier, label, ' \
-                       'or both (identifier is tried first). Failures are enforced: if the most recent ' \
-                       'assertion on a target is still failing when the test completes, a pass result ' \
-                       'is downgraded to fail, so re-run the assertion after recovering.',
+          description: 'Check that an element is currently on screen and return a one-line result that ' \
+                       'includes the element\'s type, label, value, and enabled state — enough to verify ' \
+                       'a control\'s state (e.g. a switch value) without reading the full accessibility ' \
+                       'tree. Use it IN PLACE OF a tree fetch for verification steps, not in addition to ' \
+                       'one. Provide identifier, label, or both (identifier is tried first). Failures are ' \
+                       'enforced: if the most recent assertion on a target is still failing when the test ' \
+                       'completes, a pass result is downgraded to fail, so re-run the assertion after ' \
+                       'recovering.',
           input_schema: {
             type: 'object',
             properties: {
@@ -128,9 +142,10 @@ module SimulatorLLMPilot
         {
           name: 'wait_for_element',
           description: 'Wait until an element appears on screen, polling up to timeout_seconds, and ' \
-                       'return a one-line result. Use this after an action that triggers a transition ' \
-                       'when you know an identifier or label expected on the destination screen — ' \
-                       'cheaper than repeated get_accessibility_tree calls.',
+                       'return a one-line result including the element\'s type, label, value, and ' \
+                       'enabled state. Use this after an action that triggers a transition when you ' \
+                       'know an identifier or label expected on the destination screen — it replaces ' \
+                       'the wait + get_accessibility_tree pattern in a single, much cheaper call.',
           input_schema: {
             type: 'object',
             properties: {
@@ -236,7 +251,9 @@ module SimulatorLLMPilot
         },
         {
           name: 'wait',
-          description: 'Wait for a specified duration. Max 10 seconds.',
+          description: 'Wait for a specified duration. Max 10 seconds. If you are waiting for a ' \
+                       'specific element to appear, use wait_for_element instead — it returns as soon ' \
+                       'as the element shows up and costs one call instead of wait + a tree fetch.',
           input_schema: {
             type: 'object',
             properties: {

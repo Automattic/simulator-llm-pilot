@@ -32,6 +32,14 @@ _None_
   accumulating in the conversation (their tokens are re-billed on every later turn).
 - Add a `--compress-context-over CHARS` CLI option to tune (or disable, with 0)
   the compression threshold, e.g. for A/B-testing cache behavior.
+- Include the element's type, label, value, and enabled state in
+  `assert_element_exists` and `wait_for_element` results, so a one-line check can
+  also answer "what state is the control in" (e.g. a switch value) instead of
+  forcing a follow-up full-tree fetch.
+- Add a `times` parameter to `tap` and `tap_element` for repeated taps (e.g.
+  tapping Undo 10 times) in a single call with a short pause between taps,
+  recovering from stale element references mid-sequence — replaces one
+  tool-call turn per tap.
 
 ### Bug Fixes
 
@@ -49,6 +57,12 @@ _None_
 - `tap_and_wait` no longer deduplicates the returned tree when the tap target
   was not found — the failure message points the model at "the accessibility
   tree below", so that tree is always included in full.
+- Tune the system prompt and tool descriptions toward substitution rather than
+  addition: assert checks in place of tree fetches, `wait_for_element` instead
+  of the `wait` + `get_accessibility_tree` pattern, screenshots only when the
+  tree cannot answer the question, and one repeated-tap call instead of a turn
+  per tap. (Build 32591 showed the new tools sometimes ran as extra probing on
+  top of the usual exploration instead of replacing it.)
 
 ### Internal Changes
 

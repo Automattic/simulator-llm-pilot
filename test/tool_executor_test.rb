@@ -168,6 +168,70 @@ class ToolExecutorTest < Minitest::Test
     assert_equal 'Element exists: imageOptimizationSwitch', result
   end
 
+  def test_assert_element_exists_summarizes_the_element_state
+    @wda.set_find_element_result(using: 'accessibility id', value: 'imageOptimizationSwitch', result: 'el-5')
+    @wda.set_element_attributes('el-5', {
+                                  'type' => 'Switch', 'label' => 'Optimize Images', 'value' => '1', 'enabled' => true
+                                })
+
+    result = @executor.execute('assert_element_exists', { 'identifier' => 'imageOptimizationSwitch' })
+
+    assert_equal 'Element exists: imageOptimizationSwitch ' \
+                 '(type: Switch, label: Optimize Images, value: 1, enabled: true)', result
+  end
+
+  def test_element_state_summary_degrades_gracefully_when_attributes_fail
+    @wda.set_find_element_result(using: 'accessibility id', value: 'save_button', result: 'el-9')
+    @wda.fail_on(:element_attribute, RuntimeError.new('stale element'))
+
+    result = @executor.execute('assert_element_exists', { 'identifier' => 'save_button' })
+
+    assert_equal 'Element exists: save_button', result
+  end
+
+  def test_wait_for_element_includes_the_element_state
+    @wda.set_find_element_result(using: 'accessibility id', value: 'publish_button', result: 'el-3')
+    @wda.set_element_attributes('el-3', { 'type' => 'Button', 'enabled' => false })
+
+    result = @executor.execute('wait_for_element', { 'identifier' => 'publish_button' })
+
+    assert_includes result, 'Element appeared'
+    assert_includes result, '(type: Button, enabled: false)'
+  end
+
+  def test_tap_element_taps_repeatedly_with_the_times_parameter
+    @wda.set_find_element_result(using: 'accessibility id', value: 'editor-undo', result: 'el-8')
+
+    result = @executor.execute('tap_element', { 'identifier' => 'editor-undo', 'times' => 3 })
+
+    assert_equal 'Tapped element: editor-undo 3 times', result
+    assert_equal(3, @wda.calls.count { |call| call == [:click_element, 'el-8'] })
+  end
+
+  def test_tap_element_reports_partial_progress_when_the_element_disappears
+    @wda.set_find_element_result(using: 'accessibility id', value: 'editor-undo', result: 'el-8')
+    @wda.fail_on(:click_element, RuntimeError.new('stale element reference'))
+
+    result = @executor.execute('tap_element', { 'identifier' => 'editor-undo', 'times' => 3 })
+
+    assert_includes result, '0 of 3 times'
+    assert_includes result, 'unavailable'
+  end
+
+  def test_tap_element_rejects_a_fractional_times_value
+    result = @executor.execute('tap_element', { 'identifier' => 'editor-undo', 'times' => 1.5 })
+
+    assert_match(/\AError:/, result)
+    assert_includes result, 'whole number'
+  end
+
+  def test_tap_taps_repeatedly_with_the_times_parameter
+    result = @executor.execute('tap', { 'x' => 100, 'y' => 200, 'times' => 3 })
+
+    assert_equal 'Tapped at (100, 200) 3 times', result
+    assert_equal(3, @wda.calls.count { |call| call == [:tap_at, 100, 200] })
+  end
+
   def test_assert_element_exists_reports_a_missing_element
     result = @executor.execute('assert_element_exists', { 'identifier' => 'missing' })
 

@@ -119,6 +119,14 @@ module SimulatorLLMPilot
       post("/session/#{@session_id}/element/#{element_id}/click")
     end
 
+    # Read a single attribute (e.g. label, value, enabled, type) of a found
+    # element. Returns nil when the attribute is not set.
+    def element_attribute(element_id, name)
+      ensure_session!
+      response = get("/session/#{@session_id}/element/#{element_id}/attribute/#{name}")
+      response['value']
+    end
+
     def press_button(name)
       ensure_session!
       post("/session/#{@session_id}/wda/pressButton", { name: name })
