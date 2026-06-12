@@ -13,6 +13,8 @@ module SimulatorLLMPilot
     # tree-aware version since it already returns the accessibility tree below.
     ELEMENT_NOT_FOUND_PREFIX = 'Element not found:'
     TAP_BY_COORDINATES_HINT = 'Use get_accessibility_tree and tap by coordinates instead.'
+    TREE_UNCHANGED_MESSAGE = '(Accessibility tree unchanged — the last tree returned in this ' \
+                             'conversation is still current.)'
 
     attr_reader :test_completed, :test_status, :test_reason,
                 :total_infra_errors, :consecutive_infra_errors,
@@ -27,6 +29,7 @@ module SimulatorLLMPilot
       @test_status = nil
       @test_reason = nil
       @screenshot_count = 0
+      @last_tree_for_dedupe = nil
       @total_infra_errors = 0
       @consecutive_infra_errors = 0
       @tool_usage = Hash.new(0)
@@ -47,10 +50,14 @@ module SimulatorLLMPilot
       @logger.debug "Tool call: #{tool_name}(#{truncate(sanitized_debug_input(input), 200)})"
 
       result = case tool_name
-               when 'get_accessibility_tree' then exec_get_tree
+               when 'get_accessibility_tree' then dedupe_tree(exec_get_tree)
                when 'tap'                    then exec_tap(input)
                when 'tap_element'            then exec_tap_element(input)
                when 'tap_and_wait'           then exec_tap_and_wait(input)
+               when 'tap_collection_cell'    then exec_tap_collection_cell(input)
+               when 'assert_element_exists'  then exec_assert_element(input, expect_present: true)
+               when 'assert_element_absent'  then exec_assert_element(input, expect_present: false)
+               when 'wait_for_element'       then exec_wait_for_element(input)
                when 'swipe'                  then exec_swipe(input)
                when 'type_text'              then exec_type_text(input)
                when 'clear_text'             then exec_clear_text
@@ -110,11 +117,7 @@ module SimulatorLLMPilot
     def exec_tap_element(input)
       identifier = present_string(input['identifier'])
       label = present_string(input['label'])
-      element_id = nil
-
-      element_id = @wda.find_element(using: 'accessibility id', value: identifier) if identifier
-      element_id = @wda.find_element(using: 'accessibility id', value: label) if element_id.nil? && label
-      element_id = @wda.find_element(using: 'predicate string', value: label_predicate(label)) if element_id.nil? && label
+      element_id = find_element_id(identifier, label)
 
       if element_id.nil?
         target = identifier || label || '(no identifier or label provided)'
@@ -125,6 +128,93 @@ module SimulatorLLMPilot
       target = identifier || label
       @logger.info "  Tapped element '#{target}'"
       "Tapped element: #{target}"
+    end
+
+    # Shared element lookup: accessibility identifier first, then the label as
+    # an identifier, then a name/label predicate match.
+    def find_element_id(identifier, label)
+      element_id = nil
+      element_id = @wda.find_element(using: 'accessibility id', value: identifier) if identifier
+      element_id = @wda.find_element(using: 'accessibility id', value: label) if element_id.nil? && label
+      element_id = @wda.find_element(using: 'predicate string', value: label_predicate(label)) if element_id.nil? && label
+      element_id
+    end
+
+    def exec_assert_element(input, expect_present:)
+      identifier = present_string(input['identifier'])
+      label = present_string(input['label'])
+      target = identifier || label
+      raise "requires 'identifier' or 'label'" if target.nil?
+
+      found = !find_element_id(identifier, label).nil?
+      @logger.info "  Assert #{expect_present ? 'exists' : 'absent'} '#{target}': #{found ? 'found' : 'not found'}"
+
+      if expect_present
+        return "Element exists: #{target}" if found
+
+        "ASSERTION FAILED — element not found: #{target}. If this is unexpected, " \
+          'fetch the accessibility tree to see the current screen.'
+      elsif found
+        "ASSERTION FAILED — element is still present: #{target}."
+      else
+        "Element is absent: #{target}"
+      end
+    end
+
+    # Poll for an element until it appears or the timeout elapses. Returns a
+    # one-line result either way, so a screen transition can be awaited without
+    # re-reading full accessibility trees.
+    def exec_wait_for_element(input)
+      identifier = present_string(input['identifier'])
+      label = present_string(input['label'])
+      target = identifier || label
+      raise "requires 'identifier' or 'label'" if target.nil?
+
+      timeout_seconds = clamp_wait_timeout(input['timeout_seconds'])
+      started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      deadline = started + timeout_seconds
+      loop do
+        if find_element_id(identifier, label)
+          elapsed = Process.clock_gettime(Process::CLOCK_MONOTONIC) - started
+          @logger.info "  Element '#{target}' appeared after #{elapsed.round(1)}s"
+          return "Element appeared after #{elapsed.round(1)}s: #{target}"
+        end
+
+        remaining = deadline - Process.clock_gettime(Process::CLOCK_MONOTONIC)
+        break unless remaining.positive?
+
+        sleep [remaining, POLL_INTERVAL_SECONDS].min
+      end
+
+      "Element did NOT appear within #{timeout_seconds}s: #{target}. " \
+        'Fetch the accessibility tree if you need to see the current screen.'
+    end
+
+    def exec_tap_collection_cell(input)
+      collection = present_string(input['collection_identifier'])
+      raise "requires 'collection_identifier'" if collection.nil?
+
+      index = (input['index'] || 0).to_i
+      raise 'index must be 0 or greater' if index.negative?
+
+      collection_id = @wda.find_element(using: 'accessibility id', value: collection)
+      return "#{ELEMENT_NOT_FOUND_PREFIX} #{collection}. #{TAP_BY_COORDINATES_HINT}" if collection_id.nil?
+
+      cells = @wda.find_child_elements(collection_id, using: 'class chain', value: '**/XCUIElementTypeCell')
+      if cells.empty?
+        return "No cells found inside #{collection}. The collection may still be loading — " \
+               'wait briefly and retry, or fetch the accessibility tree.'
+      end
+      if index >= cells.length
+        return "Cell index #{index} is out of range: #{collection} has #{cells.length} " \
+               "visible cells (0-#{cells.length - 1})."
+      end
+
+      cell = cells[index]
+      cell_id = cell['ELEMENT'] || cell.values.first
+      @wda.click_element(cell_id)
+      @logger.info "  Tapped cell #{index} of '#{collection}'"
+      "Tapped cell #{index} of #{collection} (#{cells.length} cells visible)"
     end
 
     # Tap and return the resulting accessibility tree in one tool call, so the
@@ -143,7 +233,23 @@ module SimulatorLLMPilot
       # If the element wasn't found, the tree is already included below, so point
       # the model at it instead of telling it to fetch the tree (a wasted turn).
       status = status.sub(TAP_BY_COORDINATES_HINT, 'Find the target in the accessibility tree below and tap by coordinates instead.')
-      "#{status}\n\n#{tree}"
+      "#{status}\n\n#{dedupe_tree(tree)}"
+    end
+
+    # Replace a tree identical to the one most recently returned to the model
+    # with a short marker. Re-sending an unchanged ~25KB tree adds nothing the
+    # model doesn't already have, but its tokens are re-billed on every later
+    # turn of the conversation; the marker carries the same information ("the
+    # screen did not change"). Comparison ignores memory addresses, which differ
+    # between snapshots of an otherwise identical UI. Internal tree reads (e.g.
+    # the change-polling in settle_and_read_tree) bypass this on purpose — only
+    # results that reach the model are deduplicated.
+    def dedupe_tree(tree)
+      comparable = comparable_tree(tree)
+      return TREE_UNCHANGED_MESSAGE if comparable == @last_tree_for_dedupe
+
+      @last_tree_for_dedupe = comparable
+      tree
     end
 
     def perform_tap(input)

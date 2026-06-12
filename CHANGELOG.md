@@ -21,6 +21,17 @@ _None_
   resulting accessibility tree in one call, with an optional `wait_for` readiness
   marker, so the common tap-then-read step costs one turn instead of two. The
   agent is prompted to prefer it for taps.
+- Add concise verification tools — `assert_element_exists`, `assert_element_absent`,
+  and `wait_for_element` — that return one-line results, so the model can verify
+  UI state without pulling a full accessibility tree (~25KB) per check.
+- Add a `tap_collection_cell` tool that taps the Nth cell of a collection/grid view
+  by the collection's accessibility identifier (e.g. picking a photo in a media
+  picker) without reading the tree to compute cell coordinates.
+- Return a short "(Accessibility tree unchanged ...)" marker instead of repeating
+  a tree identical to the last one returned, so unchanged ~25KB trees stop
+  accumulating in the conversation (their tokens are re-billed on every later turn).
+- Add a `--compress-context-over CHARS` CLI option to tune (or disable, with 0)
+  the compression threshold, e.g. for A/B-testing cache behavior.
 
 ### Bug Fixes
 
@@ -32,6 +43,13 @@ _None_
   `compress_context_when_chars_exceed`. Below that, history stays append-only so
   prompt caching keeps hitting; above it, compression acts as a context-window
   safety valve for unusually long tests.
+- Stop tree compression from thrashing the prompt cache: the default threshold is
+  raised from 600K to 2.5M chars (~625K tokens, comfortably inside the 1M-token
+  context window), and once compression does trigger, passes after the first run
+  in batches instead of rewriting the one or two newly-old messages every turn —
+  each per-turn rewrite invalidated the cached suffix and re-billed it at the
+  cache-write rate (observed as a 50% cache-hit rate and ~2M cache-write tokens
+  on a single tree-heavy test).
 
 ## 0.1.0
 

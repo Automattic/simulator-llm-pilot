@@ -102,6 +102,12 @@ module SimulatorLLMPilot
           @config.max_context_turns = v
         end
 
+        opts.on('--compress-context-over CHARS', Integer,
+                'Compress old trees once the conversation exceeds CHARS characters ' \
+                '(default: 2500000, 0 to disable compression)') do |v|
+          @config.compress_context_when_chars_exceed = v.zero? ? nil : v
+        end
+
         opts.on('--rest-api-prefix PREFIX', 'Allowed REST API path prefix (default: /wp-json/)') do |v|
           @config.rest_api_allowed_prefix = v
         end

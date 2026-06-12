@@ -102,6 +102,18 @@ module SimulatorLLMPilot
       element['ELEMENT'] || element.values.first
     end
 
+    # Find elements that are descendants of another element (e.g. the cells
+    # inside a collection view). Returns the raw element hashes, in the order
+    # WDA reports them.
+    def find_child_elements(element_id, using:, value:)
+      ensure_session!
+      response = post("/session/#{@session_id}/element/#{element_id}/elements", {
+                        using: using,
+                        value: value
+                      })
+      response['value'] || []
+    end
+
     def click_element(element_id)
       ensure_session!
       post("/session/#{@session_id}/element/#{element_id}/click")

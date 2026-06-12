@@ -18,4 +18,20 @@ class ToolDefinitionsTest < Minitest::Test
     assert_equal [], tool[:input_schema][:required]
     assert tool[:input_schema][:properties].key?(:wait_for)
   end
+
+  def test_concise_verification_tools_are_defined
+    names = SimulatorLLMPilot::ToolDefinitions.all.map { |definition| definition[:name] }
+
+    assert_includes names, 'assert_element_exists'
+    assert_includes names, 'assert_element_absent'
+    assert_includes names, 'wait_for_element'
+    assert_includes names, 'tap_collection_cell'
+  end
+
+  def test_tap_collection_cell_requires_the_collection_identifier
+    tool = SimulatorLLMPilot::ToolDefinitions.all.find { |definition| definition[:name] == 'tap_collection_cell' }
+
+    refute_nil tool
+    assert_equal %w[collection_identifier], tool[:input_schema][:required]
+  end
 end

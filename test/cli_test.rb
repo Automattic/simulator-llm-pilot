@@ -65,4 +65,47 @@ class CLITest < Minitest::Test
       assert_equal 1, error.status
     end
   end
+
+  def test_run_parses_the_compress_context_over_flag
+    config = run_cli_and_capture_config('--compress-context-over', '1500000')
+
+    assert_equal 1_500_000, config.compress_context_when_chars_exceed
+  end
+
+  def test_compress_context_over_zero_disables_compression
+    config = run_cli_and_capture_config('--compress-context-over', '0')
+
+    assert_nil config.compress_context_when_chars_exceed
+  end
+
+  private
+
+  def run_cli_and_capture_config(*extra_args)
+    captured_config = nil
+    runner = Object.new
+    runner.define_singleton_method(:run) { |_path| [{ status: 'pass' }] }
+    runner_factory = proc do |config:, **_kwargs|
+      captured_config = config
+      runner
+    end
+
+    with_env('ANTHROPIC_API_KEY' => 'key') do
+      assert_raises(SystemExit) do
+        capture_io do
+          SimulatorLLMPilot::Runner.stub(:new, runner_factory) do
+            SimulatorLLMPilot::CLI.new([
+                                         'run', @test_path,
+                                         '--app-bundle-id', 'org.wordpress',
+                                         '--site-url', 'https://example.test',
+                                         '--username', 'ian',
+                                         '--app-password', 'secret',
+                                         *extra_args
+                                       ]).run
+          end
+        end
+      end
+    end
+
+    captured_config
+  end
 end
