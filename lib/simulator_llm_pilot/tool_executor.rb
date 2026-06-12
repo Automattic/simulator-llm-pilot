@@ -150,7 +150,11 @@ module SimulatorLLMPilot
 
       target = identifier || label
       completed = perform_repeated_taps(element_id, identifier, label, times)
-      @logger.info "  Tapped element '#{target}'#{" #{completed} times" if times > 1}"
+      if completed == 1 && times == 1
+        @logger.info "  Tapped element '#{target}'"
+      else
+        @logger.info "  Tapped element '#{target}' #{completed} of #{times} times"
+      end
 
       return "Tapped element: #{target}" if times == 1 && completed == 1
       return "Tapped element: #{target} #{completed} times" if completed == times
@@ -175,9 +179,14 @@ module SimulatorLLMPilot
       completed
     end
 
+    # A failed click usually means a stale element reference (recoverable by
+    # re-finding); infrastructure failures must keep propagating so the
+    # executor's infra-error accounting sees them.
     def tap_element_once(element_id)
       @wda.click_element(element_id)
       true
+    rescue InfraError
+      raise
     rescue StandardError
       false
     end
@@ -217,12 +226,15 @@ module SimulatorLLMPilot
 
     # Summarize a found element's state so the one-line result can also answer
     # "what state is it in" (e.g. a switch's value), often saving a follow-up
-    # tree fetch. Attribute reads degrade gracefully — a failure just omits
-    # the summary.
+    # tree fetch. Attribute reads degrade gracefully for element-level failures
+    # (e.g. a stale reference) — the summary is just omitted — but infrastructure
+    # failures keep propagating so they surface in the infra-error accounting.
     def element_state_summary(element_id)
       parts = ELEMENT_STATE_ATTRIBUTES.filter_map do |name|
         value = begin
           @wda.element_attribute(element_id, name)
+        rescue InfraError
+          raise
         rescue StandardError
           nil
         end

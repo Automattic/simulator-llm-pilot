@@ -63,6 +63,11 @@ _None_
   tree cannot answer the question, and one repeated-tap call instead of a turn
   per tap. (Build 32591 showed the new tools sometimes ran as extra probing on
   top of the usual exploration instead of replacing it.)
+- Keep `InfraError` propagating out of repeated taps and element-state
+  summaries instead of degrading it into a partial tap count or a missing
+  summary — WDA/session failures must reach the executor's infra-error
+  accounting (which aborts the test after three consecutive failures). Also
+  log the completed/attempted tap count when a tap sequence falls short.
 
 ### Internal Changes
 
