@@ -219,7 +219,7 @@ module SimulatorLLMPilotTestHelpers
   end
 
   class FakeExecutor
-    attr_accessor :test_completed, :test_status, :test_reason
+    attr_accessor :test_completed, :test_status, :test_reason, :failing_assertions
     attr_reader :tool_usage, :total_infra_errors, :consecutive_infra_errors
 
     def initialize(sequence: [])
@@ -230,6 +230,7 @@ module SimulatorLLMPilotTestHelpers
       @test_completed = false
       @test_status = nil
       @test_reason = nil
+      @failing_assertions = []
       @rest_calls = Hash.new { |hash, purpose| hash[purpose] = { called: false, satisfied: false } }
     end
 

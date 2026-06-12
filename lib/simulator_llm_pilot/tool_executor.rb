@@ -18,7 +18,7 @@ module SimulatorLLMPilot
 
     attr_reader :test_completed, :test_status, :test_reason,
                 :total_infra_errors, :consecutive_infra_errors,
-                :tool_usage, :rest_api_usage
+                :tool_usage, :rest_api_usage, :assertion_usage
 
     def initialize(wda:, simulator:, config:, logger:)
       @wda = wda
@@ -42,6 +42,9 @@ module SimulatorLLMPilot
           last_success: false,
           last_error: nil
         }
+      end
+      @assertion_usage = Hash.new do |hash, target|
+        hash[target] = { calls: 0, failures: 0, last_success: false }
       end
     end
 
@@ -98,6 +101,13 @@ module SimulatorLLMPilot
       usage[:calls].positive? && usage[:last_success]
     end
 
+    # Targets whose most recent assert_element_* check failed. Keyed on the
+    # most recent check per target (not "any failure ever") so the legitimate
+    # probe pattern — assert, recover, re-assert — is not penalized.
+    def failing_assertions
+      @assertion_usage.reject { |_target, usage| usage[:last_success] }.keys
+    end
+
     private
 
     def exec_get_tree
@@ -147,6 +157,7 @@ module SimulatorLLMPilot
       raise "requires 'identifier' or 'label'" if target.nil?
 
       found = !find_element_id(identifier, label).nil?
+      record_assertion(target, found == expect_present)
       @logger.info "  Assert #{expect_present ? 'exists' : 'absent'} '#{target}': #{found ? 'found' : 'not found'}"
 
       if expect_present
@@ -194,8 +205,7 @@ module SimulatorLLMPilot
       collection = present_string(input['collection_identifier'])
       raise "requires 'collection_identifier'" if collection.nil?
 
-      index = (input['index'] || 0).to_i
-      raise 'index must be 0 or greater' if index.negative?
+      index = parse_cell_index(input['index'])
 
       collection_id = @wda.find_element(using: 'accessibility id', value: collection)
       return "#{ELEMENT_NOT_FOUND_PREFIX} #{collection}. #{TAP_BY_COORDINATES_HINT}" if collection_id.nil?
@@ -217,6 +227,22 @@ module SimulatorLLMPilot
       "Tapped cell #{index} of #{collection} (#{cells.length} cells visible)"
     end
 
+    # Reject anything that is not a whole number instead of silently coercing
+    # (to_i would turn 1.9 or "1foo" into 1 and tap the wrong cell); a loud
+    # error lets the model correct its input.
+    def parse_cell_index(value)
+      return 0 if value.nil?
+
+      index = case value
+              when Integer then value
+              when Float then ((value % 1).zero? ? value.to_i : nil)
+              when String then Integer(value, 10, exception: false)
+              end
+      raise "index must be a whole number, 0 or greater (got #{value.inspect})" if index.nil? || index.negative?
+
+      index
+    end
+
     # Tap and return the resulting accessibility tree in one tool call, so the
     # common "tap then read the screen" step costs one turn instead of two.
     def exec_tap_and_wait(input)
@@ -232,8 +258,10 @@ module SimulatorLLMPilot
 
       # If the element wasn't found, the tree is already included below, so point
       # the model at it instead of telling it to fetch the tree (a wasted turn).
+      # That hint only works if the tree is actually below — bypass deduplication
+      # on a failed tap so the recovery path always has the full tree in hand.
       status = status.sub(TAP_BY_COORDINATES_HINT, 'Find the target in the accessibility tree below and tap by coordinates instead.')
-      "#{status}\n\n#{dedupe_tree(tree)}"
+      "#{status}\n\n#{dedupe_tree(tree, force_full: !tapped)}"
     end
 
     # Replace a tree identical to the one most recently returned to the model
@@ -244,9 +272,12 @@ module SimulatorLLMPilot
     # between snapshots of an otherwise identical UI. Internal tree reads (e.g.
     # the change-polling in settle_and_read_tree) bypass this on purpose — only
     # results that reach the model are deduplicated.
-    def dedupe_tree(tree)
+    #
+    # force_full returns (and records) the full tree even when unchanged — used
+    # on failure paths whose message directs the model at "the tree below".
+    def dedupe_tree(tree, force_full: false)
       comparable = comparable_tree(tree)
-      return TREE_UNCHANGED_MESSAGE if comparable == @last_tree_for_dedupe
+      return TREE_UNCHANGED_MESSAGE if !force_full && comparable == @last_tree_for_dedupe
 
       @last_tree_for_dedupe = comparable
       tree
@@ -448,6 +479,13 @@ module SimulatorLLMPilot
       when 'DELETE' then Net::HTTP::Delete.new(uri)
       else raise "Unsupported HTTP method: #{method}"
       end
+    end
+
+    def record_assertion(target, satisfied)
+      usage = @assertion_usage[target]
+      usage[:calls] += 1
+      usage[:failures] += 1 unless satisfied
+      usage[:last_success] = satisfied
     end
 
     def record_rest_api_result(purpose, success:, status:, error:)

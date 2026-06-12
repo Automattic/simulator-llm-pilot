@@ -41,6 +41,36 @@ class AgentTest < Minitest::Test
     end
   end
 
+  def test_pass_is_downgraded_when_assertions_are_left_failing
+    test_case = SimulatorLLMPilot::TestParser::TestCase.new(
+      title: 'Featured Image',
+      file_path: '/tmp/featured.md',
+      raw_content: sample_markdown(include_verification: false, include_cleanup: false),
+      sections: { 'Steps' => 'Set the image.' }
+    )
+    llm = FakeLLM.new(responses: [
+                        { 'content' => [tool_use(name: 'complete_test', input: { 'status' => 'pass', 'reason' => 'looks done' })] }
+                      ])
+    executor = FakeExecutor.new
+    executor.failing_assertions = ['featured_image_current_image_menu']
+
+    SimulatorLLMPilot::ToolExecutor.stub(:new, executor) do
+      result = SimulatorLLMPilot::Agent.new(
+        test_case: test_case,
+        config: @config,
+        wda: FakeWDA.new,
+        simulator: FakeSimulator.new,
+        llm: llm,
+        logger: @logger
+      ).run
+
+      assert_equal 'fail', result[:status]
+      assert_includes result[:reason], 'assert checks were still failing'
+      assert_includes result[:reason], 'featured_image_current_image_menu'
+      assert_equal 'pass', result[:model_status]
+    end
+  end
+
   def test_returns_infra_error_when_llm_request_fails
     llm = FakeLLM.new(error: SimulatorLLMPilot::LLMError.new('Anthropic API request failed'))
     executor = FakeExecutor.new

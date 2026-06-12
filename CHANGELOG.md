@@ -35,7 +35,20 @@ _None_
 
 ### Bug Fixes
 
-_None_
+- Enforce `assert_element_exists` / `assert_element_absent` at the runner level:
+  if a target's most recent assertion is still failing when the test completes,
+  a `pass` result is downgraded to `fail` (mirroring the REST verification
+  enforcement). The probe pattern — assert, recover, re-assert — is unaffected,
+  and the system prompt tells the model to re-assert after recovering.
+- `tap_collection_cell` rejects fractional or non-numeric `index` values instead
+  of silently coercing them (e.g. `1.9` or `"1foo"` no longer tap cell 1).
+- Setting `compress_context_when_chars_exceed` to `0` programmatically now
+  disables compression (normalized to `nil` during validation), matching the
+  documented CLI behavior, instead of failing validation or meaning
+  "always compress".
+- `tap_and_wait` no longer deduplicates the returned tree when the tap target
+  was not found — the failure message points the model at "the accessibility
+  tree below", so that tree is always included in full.
 
 ### Internal Changes
 
