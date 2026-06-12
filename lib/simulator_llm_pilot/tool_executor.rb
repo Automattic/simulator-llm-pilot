@@ -9,6 +9,11 @@ module SimulatorLLMPilot
     MAX_REST_RESPONSE_CHARS = 2_000
     DEFAULT_TREE_CHANGE_TIMEOUT_SECONDS = 0.8
     POLL_INTERVAL_SECONDS = 0.3
+    MAX_TAP_REPEATS = 30
+    REPEAT_TAP_INTERVAL_SECONDS = 0.2
+    # Attributes summarized on found elements so assert/wait results answer
+    # "what state is it in", not just "is it there".
+    ELEMENT_STATE_ATTRIBUTES = %w[type label value enabled].freeze
     # Hint appended when a tap_element lookup fails. tap_and_wait swaps it for a
     # tree-aware version since it already returns the accessibility tree below.
     ELEMENT_NOT_FOUND_PREFIX = 'Element not found:'
@@ -119,14 +124,23 @@ module SimulatorLLMPilot
 
     def exec_tap(input)
       x, y = input.values_at('x', 'y')
-      @wda.tap_at(x, y)
-      @logger.info "  Tapped (#{x}, #{y})"
-      "Tapped at (#{x}, #{y})"
+      times = parse_repeat_count(input['times'])
+
+      times.times do |tap_number|
+        @wda.tap_at(x, y)
+        sleep REPEAT_TAP_INTERVAL_SECONDS if tap_number < times - 1
+      end
+
+      @logger.info "  Tapped (#{x}, #{y})#{" #{times} times" if times > 1}"
+      return "Tapped at (#{x}, #{y})" if times == 1
+
+      "Tapped at (#{x}, #{y}) #{times} times"
     end
 
     def exec_tap_element(input)
       identifier = present_string(input['identifier'])
       label = present_string(input['label'])
+      times = parse_repeat_count(input['times'])
       element_id = find_element_id(identifier, label)
 
       if element_id.nil?
@@ -134,10 +148,38 @@ module SimulatorLLMPilot
         return "#{ELEMENT_NOT_FOUND_PREFIX} #{target}. #{TAP_BY_COORDINATES_HINT}"
       end
 
-      @wda.click_element(element_id)
       target = identifier || label
-      @logger.info "  Tapped element '#{target}'"
-      "Tapped element: #{target}"
+      completed = perform_repeated_taps(element_id, identifier, label, times)
+      @logger.info "  Tapped element '#{target}'#{" #{completed} times" if times > 1}"
+
+      return "Tapped element: #{target}" if times == 1 && completed == 1
+      return "Tapped element: #{target} #{completed} times" if completed == times
+
+      "Tapped element: #{target} #{completed} of #{times} times — the element became " \
+        'unavailable; fetch the accessibility tree to see the current screen.'
+    end
+
+    # Tap the element `times` times with a short pause between taps. If a tap
+    # fails (typically a stale element reference after the UI re-rendered),
+    # re-find the element once and continue; stop early if it is gone for good.
+    def perform_repeated_taps(element_id, identifier, label, times)
+      completed = 0
+      while completed < times
+        unless tap_element_once(element_id)
+          element_id = find_element_id(identifier, label)
+          break if element_id.nil? || !tap_element_once(element_id)
+        end
+        completed += 1
+        sleep REPEAT_TAP_INTERVAL_SECONDS if completed < times
+      end
+      completed
+    end
+
+    def tap_element_once(element_id)
+      @wda.click_element(element_id)
+      true
+    rescue StandardError
+      false
     end
 
     # Shared element lookup: accessibility identifier first, then the label as
@@ -156,20 +198,37 @@ module SimulatorLLMPilot
       target = identifier || label
       raise "requires 'identifier' or 'label'" if target.nil?
 
-      found = !find_element_id(identifier, label).nil?
+      element_id = find_element_id(identifier, label)
+      found = !element_id.nil?
       record_assertion(target, found == expect_present)
       @logger.info "  Assert #{expect_present ? 'exists' : 'absent'} '#{target}': #{found ? 'found' : 'not found'}"
 
       if expect_present
-        return "Element exists: #{target}" if found
+        return "Element exists: #{target}#{element_state_summary(element_id)}" if found
 
         "ASSERTION FAILED — element not found: #{target}. If this is unexpected, " \
           'fetch the accessibility tree to see the current screen.'
       elsif found
-        "ASSERTION FAILED — element is still present: #{target}."
+        "ASSERTION FAILED — element is still present: #{target}#{element_state_summary(element_id)}."
       else
         "Element is absent: #{target}"
       end
+    end
+
+    # Summarize a found element's state so the one-line result can also answer
+    # "what state is it in" (e.g. a switch's value), often saving a follow-up
+    # tree fetch. Attribute reads degrade gracefully — a failure just omits
+    # the summary.
+    def element_state_summary(element_id)
+      parts = ELEMENT_STATE_ATTRIBUTES.filter_map do |name|
+        value = begin
+          @wda.element_attribute(element_id, name)
+        rescue StandardError
+          nil
+        end
+        "#{name}: #{value}" unless value.nil? || value.to_s.empty?
+      end
+      parts.empty? ? '' : " (#{parts.join(', ')})"
     end
 
     # Poll for an element until it appears or the timeout elapses. Returns a
@@ -185,10 +244,10 @@ module SimulatorLLMPilot
       started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
       deadline = started + timeout_seconds
       loop do
-        if find_element_id(identifier, label)
+        if (element_id = find_element_id(identifier, label))
           elapsed = Process.clock_gettime(Process::CLOCK_MONOTONIC) - started
           @logger.info "  Element '#{target}' appeared after #{elapsed.round(1)}s"
-          return "Element appeared after #{elapsed.round(1)}s: #{target}"
+          return "Element appeared after #{elapsed.round(1)}s: #{target}#{element_state_summary(element_id)}"
         end
 
         remaining = deadline - Process.clock_gettime(Process::CLOCK_MONOTONIC)
@@ -233,14 +292,27 @@ module SimulatorLLMPilot
     def parse_cell_index(value)
       return 0 if value.nil?
 
-      index = case value
-              when Integer then value
-              when Float then ((value % 1).zero? ? value.to_i : nil)
-              when String then Integer(value, 10, exception: false)
-              end
+      index = parse_whole_number(value)
       raise "index must be a whole number, 0 or greater (got #{value.inspect})" if index.nil? || index.negative?
 
       index
+    end
+
+    def parse_repeat_count(value)
+      return 1 if value.nil?
+
+      count = parse_whole_number(value)
+      raise "times must be a whole number between 1 and #{MAX_TAP_REPEATS} (got #{value.inspect})" if count.nil? || count < 1 || count > MAX_TAP_REPEATS
+
+      count
+    end
+
+    def parse_whole_number(value)
+      case value
+      when Integer then value
+      when Float then ((value % 1).zero? ? value.to_i : nil)
+      when String then Integer(value, 10, exception: false)
+      end
     end
 
     # Tap and return the resulting accessibility tree in one tool call, so the

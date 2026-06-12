@@ -72,6 +72,7 @@ module SimulatorLLMPilotTestHelpers
       @find_element_result = nil
       @find_element_results = {}
       @child_elements = {}
+      @element_attributes = {}
     end
 
     def fail_on(method_name, error)
@@ -131,6 +132,16 @@ module SimulatorLLMPilotTestHelpers
 
     def set_child_elements(element_id, cells)
       @child_elements[element_id] = cells
+    end
+
+    def set_element_attributes(element_id, attributes)
+      @element_attributes[element_id] = attributes
+    end
+
+    def element_attribute(element_id, name)
+      maybe_raise(:element_attribute)
+      @calls << [:element_attribute, element_id, name]
+      @element_attributes.dig(element_id, name)
     end
 
     def find_child_elements(element_id, using:, value:)
