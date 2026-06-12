@@ -225,6 +225,39 @@ class ToolExecutorTest < Minitest::Test
     assert_includes result, 'whole number'
   end
 
+  def test_repeated_taps_surface_infrastructure_errors
+    @wda.set_find_element_result(using: 'accessibility id', value: 'editor-undo', result: 'el-8')
+    @wda.fail_on(:click_element, SimulatorLLMPilot::InfraError.new('WDA session expired'))
+
+    result = @executor.execute('tap_element', { 'identifier' => 'editor-undo', 'times' => 3 })
+
+    assert_match(/\AINFRASTRUCTURE ERROR:/, result)
+    assert_equal 1, @executor.total_infra_errors
+  end
+
+  def test_element_state_summary_surfaces_infrastructure_errors
+    @wda.set_find_element_result(using: 'accessibility id', value: 'save_button', result: 'el-9')
+    @wda.fail_on(:element_attribute, SimulatorLLMPilot::InfraError.new('WDA session expired'))
+
+    result = @executor.execute('assert_element_exists', { 'identifier' => 'save_button' })
+
+    assert_match(/\AINFRASTRUCTURE ERROR:/, result)
+    assert_equal 1, @executor.total_infra_errors
+  end
+
+  def test_tap_element_logs_the_completed_count_when_a_single_tap_fails
+    logger, io = build_logger
+    executor = SimulatorLLMPilot::ToolExecutor.new(wda: @wda, simulator: @simulator, config: @config, logger: logger)
+    @wda.set_find_element_result(using: 'accessibility id', value: 'editor-undo', result: 'el-8')
+    @wda.fail_on(:click_element, RuntimeError.new('stale element reference'))
+
+    result = executor.execute('tap_element', { 'identifier' => 'editor-undo' })
+
+    assert_includes result, '0 of 1 times'
+    assert_includes io.string, "Tapped element 'editor-undo' 0 of 1 times"
+    refute_includes io.string, "Tapped element 'editor-undo'\n"
+  end
+
   def test_tap_taps_repeatedly_with_the_times_parameter
     result = @executor.execute('tap', { 'x' => 100, 'y' => 200, 'times' => 3 })
 
