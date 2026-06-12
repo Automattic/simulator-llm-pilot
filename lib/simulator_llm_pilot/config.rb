@@ -19,10 +19,13 @@ module SimulatorLLMPilot
       @test_timeout = 600 # 10 minutes per test
       @max_context_turns = 20 # when compressing, keep this many recent turns of trees intact
       # Only compress old accessibility trees once the conversation grows past this
-      # many characters (~150k tokens). Below it, history stays append-only so prompt
+      # many characters (~625k tokens — comfortably inside the 1M-token context
+      # window of current models). Below it, history stays append-only so prompt
       # caching keeps hitting; above it, compression acts as a context-window safety
-      # valve for unusually long tests. See Agent#compress_old_trees!.
-      @compress_context_when_chars_exceed = 600_000
+      # valve for unusually long tests. Compression rewrites history, which
+      # invalidates the cached prompt prefix, so this must stay high enough that
+      # normal tests never trigger it. See Agent#compress_old_trees!.
+      @compress_context_when_chars_exceed = 2_500_000
       @max_screenshots_per_test = 5
       @rest_api_allowed_prefix = '/wp-json/' # only allow WP REST API paths
       @app_instructions = nil # caller-provided app-specific instructions (login flow, etc.)
@@ -46,6 +49,7 @@ module SimulatorLLMPilot
       errors << '--max-turns must be a positive integer' unless positive_integer?(@max_turns_per_test)
       errors << '--timeout must be a positive integer' unless positive_integer?(@test_timeout)
       errors << '--max-context-turns must be zero or greater' if @max_context_turns.nil? || @max_context_turns.negative?
+      errors << '--compress-context-over must be a positive integer (or 0 to disable)' unless valid_compression_threshold?
       errors.concat(site_url_errors)
       errors.concat(rest_api_prefix_errors)
 
@@ -60,6 +64,10 @@ module SimulatorLLMPilot
 
     def positive_integer?(value)
       value.is_a?(Integer) && value.positive?
+    end
+
+    def valid_compression_threshold?
+      @compress_context_when_chars_exceed.nil? || positive_integer?(@compress_context_when_chars_exceed)
     end
 
     def site_url_errors

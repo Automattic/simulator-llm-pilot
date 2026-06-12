@@ -75,6 +75,72 @@ module SimulatorLLMPilot
           }
         },
         {
+          name: 'tap_collection_cell',
+          description: 'Tap the Nth visible cell inside a collection/grid view, found by the ' \
+                       "collection's accessibility identifier. Returns a one-line result, not a tree. " \
+                       'Use this to pick an item from a grid — e.g. a photo in a media picker — ' \
+                       'instead of reading the full tree to compute cell coordinates.',
+          input_schema: {
+            type: 'object',
+            properties: {
+              collection_identifier: {
+                type: 'string',
+                description: 'Accessibility identifier of the collection/grid view'
+              },
+              index: { type: 'number', description: 'Zero-based index of the cell to tap (default: 0)' }
+            },
+            required: %w[collection_identifier]
+          }
+        },
+        {
+          name: 'assert_element_exists',
+          description: 'Check that an element is currently on screen and return a one-line result. ' \
+                       'Use this for verification steps when you know the identifier or label — much ' \
+                       'cheaper than reading the full accessibility tree. Provide identifier, label, ' \
+                       'or both (identifier is tried first).',
+          input_schema: {
+            type: 'object',
+            properties: {
+              identifier: { type: 'string', description: 'Accessibility identifier (developer-assigned)' },
+              label: { type: 'string', description: 'Accessibility label (visible text)' }
+            },
+            required: []
+          }
+        },
+        {
+          name: 'assert_element_absent',
+          description: 'Check that an element is NOT currently on screen and return a one-line result. ' \
+                       'Use this to verify something disappeared (e.g. after removing or dismissing it) ' \
+                       'without reading the full accessibility tree.',
+          input_schema: {
+            type: 'object',
+            properties: {
+              identifier: { type: 'string', description: 'Accessibility identifier (developer-assigned)' },
+              label: { type: 'string', description: 'Accessibility label (visible text)' }
+            },
+            required: []
+          }
+        },
+        {
+          name: 'wait_for_element',
+          description: 'Wait until an element appears on screen, polling up to timeout_seconds, and ' \
+                       'return a one-line result. Use this after an action that triggers a transition ' \
+                       'when you know an identifier or label expected on the destination screen — ' \
+                       'cheaper than repeated get_accessibility_tree calls.',
+          input_schema: {
+            type: 'object',
+            properties: {
+              identifier: { type: 'string', description: 'Accessibility identifier (developer-assigned)' },
+              label: { type: 'string', description: 'Accessibility label (visible text)' },
+              timeout_seconds: {
+                type: 'number',
+                description: 'Max seconds to wait (0.5 to 10, default 3)'
+              }
+            },
+            required: []
+          }
+        },
+        {
           name: 'swipe',
           description: 'Swipe from one point to another. For scrolling DOWN (reveal content below): ' \
                        'swipe from lower y to upper y. For scrolling UP (reveal content above): swipe ' \

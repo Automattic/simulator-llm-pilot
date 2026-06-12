@@ -126,6 +126,142 @@ class ToolExecutorTest < Minitest::Test
     refute_includes result, 'get_accessibility_tree'   # ...not a redundant separate call
   end
 
+  def test_get_accessibility_tree_dedupes_unchanged_trees
+    @wda.tree = "Element subtree:\nButton, 0x111111, label: 'Open'"
+    first = @executor.execute('get_accessibility_tree', {})
+
+    # Same UI, fresh snapshot — only the memory addresses differ.
+    @wda.tree = "Element subtree:\nButton, 0x222222, label: 'Open'"
+    second = @executor.execute('get_accessibility_tree', {})
+
+    assert_includes first, "label: 'Open'"
+    assert_equal SimulatorLLMPilot::ToolExecutor::TREE_UNCHANGED_MESSAGE, second
+  end
+
+  def test_get_accessibility_tree_returns_changed_trees_in_full
+    @wda.tree = "Element subtree:\nscreen-one"
+    @executor.execute('get_accessibility_tree', {})
+
+    @wda.tree = "Element subtree:\nscreen-two"
+    result = @executor.execute('get_accessibility_tree', {})
+
+    assert_includes result, 'screen-two'
+  end
+
+  def test_tap_and_wait_dedupes_when_the_screen_did_not_change
+    @wda.set_find_element_result(using: 'accessibility id', value: 'noop', result: 'el-1')
+    @wda.tree = "Element subtree:\nstatic-screen"
+    @executor.execute('get_accessibility_tree', {})
+
+    result = @executor.execute('tap_and_wait', { 'identifier' => 'noop' })
+
+    assert_includes result, 'Tapped element: noop'
+    assert_includes result, 'unchanged'
+    refute_includes result, 'static-screen'
+  end
+
+  def test_assert_element_exists_returns_a_one_line_result
+    @wda.set_find_element_result(using: 'accessibility id', value: 'imageOptimizationSwitch', result: 'el-5')
+
+    result = @executor.execute('assert_element_exists', { 'identifier' => 'imageOptimizationSwitch' })
+
+    assert_equal 'Element exists: imageOptimizationSwitch', result
+  end
+
+  def test_assert_element_exists_reports_a_missing_element
+    result = @executor.execute('assert_element_exists', { 'identifier' => 'missing' })
+
+    assert_includes result, 'ASSERTION FAILED'
+    assert_includes result, 'missing'
+  end
+
+  def test_assert_element_absent_passes_when_the_element_is_gone
+    result = @executor.execute('assert_element_absent', { 'identifier' => 'featured_image_menu' })
+
+    assert_equal 'Element is absent: featured_image_menu', result
+  end
+
+  def test_assert_element_absent_fails_when_the_element_is_present
+    @wda.set_find_element_result(using: 'accessibility id', value: 'still-here', result: 'el-2')
+
+    result = @executor.execute('assert_element_absent', { 'identifier' => 'still-here' })
+
+    assert_includes result, 'ASSERTION FAILED'
+    assert_includes result, 'still present'
+  end
+
+  def test_assert_element_requires_a_target
+    result = @executor.execute('assert_element_exists', {})
+
+    assert_match(/\AError:/, result)
+  end
+
+  def test_wait_for_element_returns_once_the_element_appears
+    attempts = 0
+    @wda.define_singleton_method(:find_element) do |using:, value:|
+      @calls << [:find_element, using, value]
+      attempts += 1
+      attempts >= 3 ? 'el-7' : nil
+    end
+
+    result = @executor.execute('wait_for_element', { 'identifier' => 'late-element' })
+
+    assert_includes result, 'Element appeared'
+    assert_includes result, 'late-element'
+  end
+
+  def test_wait_for_element_reports_a_timeout
+    result = @executor.execute('wait_for_element', { 'identifier' => 'never', 'timeout_seconds' => 0.5 })
+
+    assert_includes result, 'did NOT appear'
+    assert_includes result, 'never'
+  end
+
+  def test_tap_collection_cell_taps_the_requested_cell
+    @wda.set_find_element_result(using: 'accessibility id', value: 'MediaCollection', result: 'collection-1')
+    @wda.set_child_elements('collection-1', [
+                              { 'ELEMENT' => 'cell-0' }, { 'ELEMENT' => 'cell-1' }, { 'ELEMENT' => 'cell-2' }
+                            ])
+
+    result = @executor.execute('tap_collection_cell', { 'collection_identifier' => 'MediaCollection', 'index' => 1 })
+
+    assert_equal 'Tapped cell 1 of MediaCollection (3 cells visible)', result
+    assert_includes @wda.calls, [:click_element, 'cell-1']
+  end
+
+  def test_tap_collection_cell_defaults_to_the_first_cell
+    @wda.set_find_element_result(using: 'accessibility id', value: 'MediaCollection', result: 'collection-1')
+    @wda.set_child_elements('collection-1', [{ 'ELEMENT' => 'cell-0' }, { 'ELEMENT' => 'cell-1' }])
+
+    @executor.execute('tap_collection_cell', { 'collection_identifier' => 'MediaCollection' })
+
+    assert_includes @wda.calls, [:click_element, 'cell-0']
+  end
+
+  def test_tap_collection_cell_reports_a_missing_collection
+    result = @executor.execute('tap_collection_cell', { 'collection_identifier' => 'NoSuchCollection' })
+
+    assert_includes result, 'Element not found: NoSuchCollection'
+  end
+
+  def test_tap_collection_cell_reports_an_empty_collection
+    @wda.set_find_element_result(using: 'accessibility id', value: 'EmptyCollection', result: 'collection-2')
+
+    result = @executor.execute('tap_collection_cell', { 'collection_identifier' => 'EmptyCollection' })
+
+    assert_includes result, 'No cells found'
+  end
+
+  def test_tap_collection_cell_reports_an_out_of_range_index
+    @wda.set_find_element_result(using: 'accessibility id', value: 'MediaCollection', result: 'collection-1')
+    @wda.set_child_elements('collection-1', [{ 'ELEMENT' => 'cell-0' }, { 'ELEMENT' => 'cell-1' }])
+
+    result = @executor.execute('tap_collection_cell', { 'collection_identifier' => 'MediaCollection', 'index' => 5 })
+
+    assert_includes result, 'out of range'
+    assert_includes result, '2 visible cells'
+  end
+
   def test_rest_api_tracks_usage_by_purpose_and_success
     response = fake_response(code: 200, body: '{"id": 101}')
     http = FakeHTTPTransport.new(response: response)

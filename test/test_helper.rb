@@ -71,6 +71,7 @@ module SimulatorLLMPilotTestHelpers
       @failures = {}
       @find_element_result = nil
       @find_element_results = {}
+      @child_elements = {}
     end
 
     def fail_on(method_name, error)
@@ -126,6 +127,16 @@ module SimulatorLLMPilotTestHelpers
     def click_element(element_id)
       maybe_raise(:click_element)
       @calls << [:click_element, element_id]
+    end
+
+    def set_child_elements(element_id, cells)
+      @child_elements[element_id] = cells
+    end
+
+    def find_child_elements(element_id, using:, value:)
+      maybe_raise(:find_child_elements)
+      @calls << [:find_child_elements, element_id, using, value]
+      @child_elements.fetch(element_id, [])
     end
 
     private

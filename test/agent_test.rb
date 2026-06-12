@@ -94,7 +94,7 @@ class AgentTest < Minitest::Test
     messages = agent.instance_variable_get(:@messages)
 
     assert_includes messages[1][:content][0][:content], 'compressed to save context'
-    assert_equal recent_tree, messages[3][:content][0][:content]
+    assert_equal old_tree, messages[3][:content][0][:content]
   end
 
   def test_does_not_compress_until_the_context_is_large
@@ -105,7 +105,7 @@ class AgentTest < Minitest::Test
     messages = agent.instance_variable_get(:@messages)
 
     assert_equal old_tree, messages[1][:content][0][:content]
-    assert_equal recent_tree, messages[3][:content][0][:content]
+    assert_equal old_tree, messages[3][:content][0][:content]
   end
 
   def test_messages_char_size_counts_string_keyed_assistant_blocks
@@ -117,6 +117,37 @@ class AgentTest < Minitest::Test
     assert_operator agent.send(:messages_char_size), :>=, 5000
   end
 
+  def test_compression_defers_subsequent_passes_until_a_batch_has_aged_out
+    agent = build_agent_with_trees(compress_threshold: 0)
+    agent.send(:compress_old_trees!) # first pass compresses everything before the preserved window
+
+    # Two more turns age another tree out of the preserved window...
+    messages = agent.instance_variable_get(:@messages)
+    messages << { role: 'user', content: [{ type: 'tool_result', content: old_tree }] }
+    messages << { role: 'assistant', content: [] }
+    agent.send(:compress_old_trees!)
+
+    # ...but a per-turn rewrite would invalidate the cached prompt suffix every
+    # turn, so the pass is deferred until a full batch has aged out.
+    assert_equal old_tree, messages[3][:content][0][:content]
+  end
+
+  def test_compression_resumes_once_a_full_batch_has_aged_out
+    agent = build_agent_with_trees(compress_threshold: 0)
+    agent.send(:compress_old_trees!)
+
+    messages = agent.instance_variable_get(:@messages)
+    SimulatorLLMPilot::Agent::COMPRESSION_BATCH_MESSAGES.times do
+      messages << { role: 'user', content: [{ type: 'tool_result', content: old_tree }] }
+      messages << { role: 'assistant', content: [] }
+    end
+    agent.send(:compress_old_trees!)
+
+    assert_includes messages[5][:content][0][:content], 'compressed to save context'
+    # The preserved recent window stays intact.
+    assert_equal old_tree, messages[-2][:content][0][:content]
+  end
+
   def test_nil_compression_threshold_means_never_compress
     agent = build_agent_with_trees(compress_threshold: nil)
 
@@ -125,17 +156,13 @@ class AgentTest < Minitest::Test
     messages = agent.instance_variable_get(:@messages)
 
     assert_equal old_tree, messages[1][:content][0][:content]
-    assert_equal recent_tree, messages[3][:content][0][:content]
+    assert_equal old_tree, messages[3][:content][0][:content]
   end
 
   private
 
   def old_tree
     @old_tree ||= "Element subtree:\n#{"Attributes: Window\n" * 200}"
-  end
-
-  def recent_tree
-    @recent_tree ||= "Element subtree:\n#{"Attributes: Window\n" * 10}"
   end
 
   def build_agent_with_trees(compress_threshold:)
@@ -158,7 +185,7 @@ class AgentTest < Minitest::Test
                                   { role: 'user', content: 'initial' },
                                   { role: 'user', content: [{ type: 'tool_result', content: old_tree }] },
                                   { role: 'assistant', content: [] },
-                                  { role: 'user', content: [{ type: 'tool_result', content: recent_tree }] },
+                                  { role: 'user', content: [{ type: 'tool_result', content: old_tree }] },
                                   { role: 'assistant', content: [] }
                                 ])
     agent

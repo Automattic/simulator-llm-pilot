@@ -27,6 +27,12 @@ module SimulatorLLMPilot
          screen when you know it. After a swipe or type_text, call get_accessibility_tree
          to verify the UI changed before proceeding.
       5. If an element isn't visible, scroll down by swiping up from the right edge.
+      6. For simple checks — "is X on screen", "did Y disappear" — use assert_element_exists /
+         assert_element_absent instead of fetching the tree; they return one-line results.
+         After an action that triggers a screen transition, when you know an identifier or
+         label expected on the destination screen, wait_for_element is the cheapest check.
+      7. To pick an item from a grid or collection (e.g. a photo in a media picker), use
+         tap_collection_cell with the collection's identifier and the cell index.
 
       ## Element Finding Priority
 
@@ -48,6 +54,8 @@ module SimulatorLLMPilot
         the tree. Tap "Allow", "OK", or "Don't Allow" as appropriate.
       - **Loading states**: If the tree shows a loading indicator, wait 2 seconds
         and re-fetch the tree.
+      - **Unchanged tree**: A tool may return "(Accessibility tree unchanged ...)" instead
+        of repeating the tree — the last tree you received is still current.
       - **Failed tap**: If the tree is unchanged after a tap, try: (a) re-fetch tree
         and recompute coordinates, (b) use tap_element, (c) try a slightly offset position.
 
@@ -77,6 +85,12 @@ module SimulatorLLMPilot
 
     MAX_CONSECUTIVE_INFRA_ERRORS = 3
 
+    # After the first compression pass, defer further passes until at least this
+    # many messages have aged out of the preserved window. Compressing the one or
+    # two messages that cross the cutoff each turn would invalidate the cached
+    # prompt suffix every turn (see compress_old_trees!).
+    COMPRESSION_BATCH_MESSAGES = 10
+
     def initialize(test_case:, config:, wda:, simulator:, llm:, logger:)
       @test_case = test_case
       @config = config
@@ -85,6 +99,7 @@ module SimulatorLLMPilot
       @executor = ToolExecutor.new(wda: wda, simulator: simulator, config: config, logger: logger)
       @messages = []
       @turn_count = 0
+      @compressed_until_index = 0
     end
 
     def run
@@ -286,6 +301,15 @@ module SimulatorLLMPilot
     # would invalidate that cache. Above the threshold (an unusually long test),
     # compression kicks in as a context-window safety valve, keeping the most
     # recent trees intact so the model can still reference the current UI state.
+    #
+    # Every pass rewrites history, which invalidates the cached prompt prefix
+    # from the first rewritten message onward — the next request then re-writes
+    # the entire suffix to the cache at the premium write rate. A naive pass per
+    # turn compresses the one or two messages that just aged out of the preserved
+    # window, paying that suffix re-write on every turn (observed as ~50% cache
+    # hit rates and 2M cache-write tokens on tree-heavy tests). Instead, passes
+    # after the first are deferred until COMPRESSION_BATCH_MESSAGES messages have
+    # aged out, so the cost is paid once per batch.
     def compress_old_trees!
       threshold = @config.compress_context_when_chars_exceed
       return if threshold.nil? || messages_char_size < threshold
@@ -294,8 +318,9 @@ module SimulatorLLMPilot
       cutoff = @messages.length - preserve_recent
 
       return if cutoff <= 1
+      return unless @compressed_until_index.zero? || cutoff - 1 - @compressed_until_index >= COMPRESSION_BATCH_MESSAGES
 
-      (1...cutoff).each do |index|
+      ((@compressed_until_index + 1)...cutoff).each do |index|
         msg = @messages[index]
         next unless msg[:role] == 'user'
 
@@ -312,6 +337,8 @@ module SimulatorLLMPilot
           block[:content] = "[Accessibility tree — #{text.lines.size} lines, compressed to save context]"
         end
       end
+
+      @compressed_until_index = cutoff - 1
     end
 
     def accessibility_tree?(text)
