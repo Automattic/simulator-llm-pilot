@@ -97,7 +97,9 @@ module SimulatorLLMPilot
           description: 'Check that an element is currently on screen and return a one-line result. ' \
                        'Use this for verification steps when you know the identifier or label — much ' \
                        'cheaper than reading the full accessibility tree. Provide identifier, label, ' \
-                       'or both (identifier is tried first).',
+                       'or both (identifier is tried first). Failures are enforced: if the most recent ' \
+                       'assertion on a target is still failing when the test completes, a pass result ' \
+                       'is downgraded to fail, so re-run the assertion after recovering.',
           input_schema: {
             type: 'object',
             properties: {
@@ -111,7 +113,9 @@ module SimulatorLLMPilot
           name: 'assert_element_absent',
           description: 'Check that an element is NOT currently on screen and return a one-line result. ' \
                        'Use this to verify something disappeared (e.g. after removing or dismissing it) ' \
-                       'without reading the full accessibility tree.',
+                       'without reading the full accessibility tree. Failures are enforced: if the most ' \
+                       'recent assertion on a target is still failing when the test completes, a pass ' \
+                       'result is downgraded to fail, so re-run the assertion after recovering.',
           input_schema: {
             type: 'object',
             properties: {

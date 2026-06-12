@@ -53,4 +53,23 @@ class ConfigTest < Minitest::Test
 
     assert_equal 'https://wp.test', config.site_url
   end
+
+  def test_validate_normalizes_zero_compression_threshold_to_nil
+    # 0 means "disable compression" from any entry point, not just the CLI.
+    config = build_config
+    config.compress_context_when_chars_exceed = 0
+
+    config.validate!
+
+    assert_nil config.compress_context_when_chars_exceed
+  end
+
+  def test_validate_rejects_a_negative_compression_threshold
+    config = build_config
+    config.compress_context_when_chars_exceed = -1
+
+    error = assert_raises(ArgumentError) { config.validate! }
+
+    assert_includes error.message, '--compress-context-over must be a positive integer'
+  end
 end

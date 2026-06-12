@@ -262,6 +262,58 @@ class ToolExecutorTest < Minitest::Test
     assert_includes result, '2 visible cells'
   end
 
+  def test_tap_collection_cell_rejects_a_fractional_index
+    result = @executor.execute('tap_collection_cell', { 'collection_identifier' => 'MediaCollection', 'index' => 1.9 })
+
+    assert_match(/\AError:/, result)
+    assert_includes result, 'whole number'
+  end
+
+  def test_tap_collection_cell_rejects_a_non_numeric_index
+    result = @executor.execute('tap_collection_cell',
+                               { 'collection_identifier' => 'MediaCollection', 'index' => '1foo' })
+
+    assert_match(/\AError:/, result)
+    assert_includes result, 'whole number'
+  end
+
+  def test_tap_collection_cell_accepts_integer_like_indices
+    @wda.set_find_element_result(using: 'accessibility id', value: 'MediaCollection', result: 'collection-1')
+    @wda.set_child_elements('collection-1', [{ 'ELEMENT' => 'cell-0' }, { 'ELEMENT' => 'cell-1' }])
+
+    @executor.execute('tap_collection_cell', { 'collection_identifier' => 'MediaCollection', 'index' => '1' })
+    @executor.execute('tap_collection_cell', { 'collection_identifier' => 'MediaCollection', 'index' => 1.0 })
+
+    assert_equal(2, @wda.calls.count { |call| call == [:click_element, 'cell-1'] })
+  end
+
+  def test_tap_and_wait_failure_bypasses_tree_dedupe
+    @wda.tree = "Element subtree:\nsame-screen"
+    @executor.execute('get_accessibility_tree', {})
+
+    # find_element returns nil by default, so the tap target is missing and the
+    # failure message points the model at "the accessibility tree below" — the
+    # tree must therefore be present in full, not replaced by the marker.
+    result = @executor.execute('tap_and_wait', { 'identifier' => 'missing-button' })
+
+    assert_includes result, 'Element not found: missing-button'
+    assert_includes result, 'same-screen'
+    refute_includes result, 'unchanged'
+  end
+
+  def test_failing_assertions_reflects_the_most_recent_result_per_target
+    result = @executor.execute('assert_element_exists', { 'identifier' => 'save_button' })
+
+    assert_includes result, 'ASSERTION FAILED'
+    assert_equal ['save_button'], @executor.failing_assertions
+
+    # The element appears (e.g. after scrolling); a re-run clears the failure.
+    @wda.set_find_element_result(using: 'accessibility id', value: 'save_button', result: 'el-1')
+    @executor.execute('assert_element_exists', { 'identifier' => 'save_button' })
+
+    assert_empty @executor.failing_assertions
+  end
+
   def test_rest_api_tracks_usage_by_purpose_and_success
     response = fake_response(code: 200, body: '{"id": 101}')
     http = FakeHTTPTransport.new(response: response)

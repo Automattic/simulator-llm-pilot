@@ -38,6 +38,9 @@ module SimulatorLLMPilot
 
     def validate!
       @site_url = normalized_site_url(@site_url)
+      # 0 means "disable compression" regardless of how the value was set (CLI
+      # or programmatically); nil is the canonical disabled state everywhere else.
+      @compress_context_when_chars_exceed = nil if @compress_context_when_chars_exceed.is_a?(Numeric) && @compress_context_when_chars_exceed.zero?
 
       errors = []
       errors << 'ANTHROPIC_API_KEY env var is required' if blank?(@anthropic_api_key)
