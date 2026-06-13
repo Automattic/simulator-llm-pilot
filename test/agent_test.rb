@@ -99,6 +99,12 @@ class AgentTest < Minitest::Test
 
       assert_equal 'fail', result[:status]
       assert_includes result[:reason], 'assert checks were still failing'
+      # Pin the downgrade-from-pass semantics: the model declared pass, and the
+      # only enforced failure is the assertion one (verification and cleanup
+      # were satisfied, so a fail from those would be a different regression).
+      assert_equal 'pass', result[:model_status]
+      assert_equal 1, result[:enforced_failures].length
+      assert_includes result[:enforced_failures].first, 'featured_image_current_image_menu'
     end
   end
 
