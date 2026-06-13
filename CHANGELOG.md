@@ -68,6 +68,10 @@ _None_
   summary — WDA/session failures must reach the executor's infra-error
   accounting (which aborts the test after three consecutive failures). Also
   log the completed/attempted tap count when a tap sequence falls short.
+- Record an assertion outcome only when the assert tool call completes: an
+  infrastructure failure during the element-state reads no longer marks the
+  target as satisfied (which could have cleared a previously failing target
+  the model never successfully re-checked).
 
 ### Internal Changes
 

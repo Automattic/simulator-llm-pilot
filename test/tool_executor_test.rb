@@ -243,6 +243,24 @@ class ToolExecutorTest < Minitest::Test
 
     assert_match(/\AINFRASTRUCTURE ERROR:/, result)
     assert_equal 1, @executor.total_infra_errors
+    # A call that errored must not record an assertion outcome.
+    assert_empty @executor.assertion_usage
+  end
+
+  def test_an_infra_error_during_the_summary_does_not_clear_a_failing_assertion
+    # The target fails first (element missing), so it is tracked as failing.
+    @executor.execute('assert_element_exists', { 'identifier' => 'save_button' })
+
+    assert_equal ['save_button'], @executor.failing_assertions
+
+    # On the retry the element is found, but WDA dies while reading attributes —
+    # the model never saw a successful result, so the target must stay failing.
+    @wda.set_find_element_result(using: 'accessibility id', value: 'save_button', result: 'el-9')
+    @wda.fail_on(:element_attribute, SimulatorLLMPilot::InfraError.new('WDA session expired'))
+    result = @executor.execute('assert_element_exists', { 'identifier' => 'save_button' })
+
+    assert_match(/\AINFRASTRUCTURE ERROR:/, result)
+    assert_equal ['save_button'], @executor.failing_assertions
   end
 
   def test_tap_element_logs_the_completed_count_when_a_single_tap_fails

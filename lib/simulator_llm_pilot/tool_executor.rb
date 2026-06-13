@@ -209,16 +209,21 @@ module SimulatorLLMPilot
 
       element_id = find_element_id(identifier, label)
       found = !element_id.nil?
+      # Summarize before recording: an InfraError during the attribute reads
+      # aborts the whole tool call, and a call that errored must not record an
+      # assertion outcome (it could otherwise mark a previously failing target
+      # as satisfied even though the model never saw a successful result).
+      state_summary = found ? element_state_summary(element_id) : ''
       record_assertion(target, found == expect_present)
       @logger.info "  Assert #{expect_present ? 'exists' : 'absent'} '#{target}': #{found ? 'found' : 'not found'}"
 
       if expect_present
-        return "Element exists: #{target}#{element_state_summary(element_id)}" if found
+        return "Element exists: #{target}#{state_summary}" if found
 
         "ASSERTION FAILED — element not found: #{target}. If this is unexpected, " \
           'fetch the accessibility tree to see the current screen.'
       elsif found
-        "ASSERTION FAILED — element is still present: #{target}#{element_state_summary(element_id)}."
+        "ASSERTION FAILED — element is still present: #{target}#{state_summary}."
       else
         "Element is absent: #{target}"
       end
