@@ -71,6 +71,38 @@ class AgentTest < Minitest::Test
     end
   end
 
+  def test_failing_assertions_are_waived_when_rest_verification_passes
+    # Mirrors build 32592: the model probed for a "Done" button that turned out
+    # not to be needed, finished the flow another way, and REST verification
+    # confirmed the server-side state. Server-confirmed state outranks a UI
+    # probe left failing.
+    llm = FakeLLM.new(responses: [
+                        { 'content' => [tool_use(name: 'rest_api_call',
+                                                 input: { 'purpose' => 'verification', 'method' => 'GET',
+                                                          'path' => '/wp-json/wp/v2/posts' }, id: '1')] },
+                        { 'content' => [tool_use(name: 'rest_api_call',
+                                                 input: { 'purpose' => 'cleanup', 'method' => 'DELETE',
+                                                          'path' => '/wp-json/wp/v2/posts/1' }, id: '2')] },
+                        { 'content' => [tool_use(name: 'complete_test', input: { 'status' => 'pass', 'reason' => 'done' })] }
+                      ])
+    executor = FakeExecutor.new
+    executor.failing_assertions = ['Done']
+
+    SimulatorLLMPilot::ToolExecutor.stub(:new, executor) do
+      result = SimulatorLLMPilot::Agent.new(
+        test_case: @test_case,
+        config: @config,
+        wda: FakeWDA.new,
+        simulator: FakeSimulator.new,
+        llm: llm,
+        logger: @logger
+      ).run
+
+      assert_equal 'pass', result[:status]
+      assert_empty result[:enforced_failures]
+    end
+  end
+
   def test_returns_infra_error_when_llm_request_fails
     llm = FakeLLM.new(error: SimulatorLLMPilot::LLMError.new('Anthropic API request failed'))
     executor = FakeExecutor.new
