@@ -71,11 +71,10 @@ class AgentTest < Minitest::Test
     end
   end
 
-  def test_failing_assertions_are_waived_when_rest_verification_passes
-    # Mirrors build 32592: the model probed for a "Done" button that turned out
-    # not to be needed, finished the flow another way, and REST verification
-    # confirmed the server-side state. Server-confirmed state outranks a UI
-    # probe left failing.
+  def test_failing_assertions_downgrade_a_pass_even_when_rest_verification_passes
+    # REST verification confirms server-side state; a failing UI assertion is
+    # an independent UI-level check and must not be masked by it. (Probes that
+    # should not be enforced belong in wait_for_element, not assert_element_*.)
     llm = FakeLLM.new(responses: [
                         { 'content' => [tool_use(name: 'rest_api_call',
                                                  input: { 'purpose' => 'verification', 'method' => 'GET',
@@ -86,7 +85,7 @@ class AgentTest < Minitest::Test
                         { 'content' => [tool_use(name: 'complete_test', input: { 'status' => 'pass', 'reason' => 'done' })] }
                       ])
     executor = FakeExecutor.new
-    executor.failing_assertions = ['Done']
+    executor.failing_assertions = ['featured_image_current_image_menu']
 
     SimulatorLLMPilot::ToolExecutor.stub(:new, executor) do
       result = SimulatorLLMPilot::Agent.new(
@@ -98,8 +97,8 @@ class AgentTest < Minitest::Test
         logger: @logger
       ).run
 
-      assert_equal 'pass', result[:status]
-      assert_empty result[:enforced_failures]
+      assert_equal 'fail', result[:status]
+      assert_includes result[:reason], 'assert checks were still failing'
     end
   end
 
