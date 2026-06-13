@@ -72,12 +72,15 @@ _None_
   infrastructure failure during the element-state reads no longer marks the
   target as satisfied (which could have cleared a previously failing target
   the model never successfully re-checked).
-- Waive assertion enforcement when the test's declared REST verification ran
-  and passed: server-confirmed state outranks a UI probe the model left
-  failing. Build 32592 false-failed "Create a Scheduled Post" over a "Done"
-  button probe even though REST verification confirmed the scheduled post.
-  UI-only tests keep full enforcement, and the prompt/tool descriptions now
-  steer exploratory probes to the unenforced wait_for_element.
+- Keep assert_element_* failures always enforced — including when REST
+  verification passed (REST confirms server state; assertions check UI state,
+  and one must not mask the other). The probe-vs-requirement distinction is
+  handled at the tool level instead: build 32592 false-failed "Create a
+  Scheduled Post" over an exploratory "Done" button probe, so the prompt and
+  tool descriptions now reserve assert_element_* for conditions the test
+  requires, steer probes to the unenforced wait_for_element, and explain how
+  to clear a stale failing record with an honest opposite assertion once the
+  UI reflects the correct end state.
 
 ### Internal Changes
 

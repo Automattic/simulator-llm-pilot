@@ -75,12 +75,16 @@ module SimulatorLLMPilot
       ## Rules
 
       - Use assert_element_exists / assert_element_absent only for conditions the test
-        REQUIRES to be true — their failures are enforced by the runner: if a target's
-        most recent assertion is still failing when the test completes, a pass result
-        is downgraded to fail. If you recover after a failed assertion (scrolling,
-        waiting, retrying), re-run the assertion to confirm. For exploratory probes —
-        "is there maybe a Done button here?" — use wait_for_element with a short
-        timeout instead; its result is not enforced.
+        REQUIRES to be true — their failures are ALWAYS enforced by the runner: if a
+        target's most recent assertion is still failing when the test completes, a
+        pass result is downgraded to fail, regardless of any other verification. If
+        you recover after a failed assertion (scrolling, waiting, retrying), re-run
+        the assertion to confirm. If you asserted something that turned out not to be
+        required, clear the record with an honest re-check of that target once the UI
+        reflects the correct end state — e.g. assert_element_absent after the element
+        is correctly gone. For exploratory probes — "is there maybe a Done button
+        here?" — use wait_for_element with a short timeout instead; its result is not
+        enforced.
       - NEVER call the same tool with the same arguments more than 3 times in a row.
       - If stuck after 5 retries on the same step, mark the test as failed.
       - ALWAYS call complete_test exactly once when done, whether pass or fail.
@@ -265,13 +269,13 @@ module SimulatorLLMPilot
                                 cleanup_expected:, cleanup_ran:, cleanup_satisfied:, failing_assertions: [])
       failures = []
 
-      # A UI assertion the model left failing is waived when the test's declared
-      # REST verification ran and passed: the server-confirmed state is stronger
-      # evidence than a UI probe (e.g. a "Done" button the model checked for but
-      # turned out not to need). For UI-only tests, assertions remain enforced —
-      # they are the only check there is.
-      verification_passed = verification_expected && verification_ran && verification_satisfied
-      if !failing_assertions.empty? && !verification_passed
+      # Failing assertions are always enforced — even when REST verification
+      # passed. REST confirms server-side state; assert_element_* checks UI
+      # state, and one passing says nothing about the other (a waiver here
+      # would silently mask real UI failures in tests that have both). The
+      # probe-vs-requirement distinction is handled at the tool level instead:
+      # exploratory probes belong in wait_for_element, which is not enforced.
+      unless failing_assertions.empty?
         failures << 'assert checks were still failing when the test completed: ' \
                     "#{failing_assertions.join(', ')}"
       end
