@@ -110,10 +110,11 @@ module SimulatorLLMPilot
                        'includes the element\'s type, label, value, and enabled state — enough to verify ' \
                        'a control\'s state (e.g. a switch value) without reading the full accessibility ' \
                        'tree. Use it IN PLACE OF a tree fetch for verification steps, not in addition to ' \
-                       'one. Provide identifier, label, or both (identifier is tried first). Failures are ' \
-                       'enforced: if the most recent assertion on a target is still failing when the test ' \
-                       'completes, a pass result is downgraded to fail, so re-run the assertion after ' \
-                       'recovering.',
+                       'one. Provide identifier, label, or both (identifier is tried first). Only assert ' \
+                       'conditions the test REQUIRES — failures are enforced: if the most recent assertion ' \
+                       'on a target is still failing when the test completes, a pass result is downgraded ' \
+                       'to fail, so re-run the assertion after recovering. For exploratory probes, use ' \
+                       'wait_for_element instead (not enforced).',
           input_schema: {
             type: 'object',
             properties: {
@@ -127,9 +128,10 @@ module SimulatorLLMPilot
           name: 'assert_element_absent',
           description: 'Check that an element is NOT currently on screen and return a one-line result. ' \
                        'Use this to verify something disappeared (e.g. after removing or dismissing it) ' \
-                       'without reading the full accessibility tree. Failures are enforced: if the most ' \
-                       'recent assertion on a target is still failing when the test completes, a pass ' \
-                       'result is downgraded to fail, so re-run the assertion after recovering.',
+                       'without reading the full accessibility tree. Only assert conditions the test ' \
+                       'REQUIRES — failures are enforced: if the most recent assertion on a target is ' \
+                       'still failing when the test completes, a pass result is downgraded to fail, so ' \
+                       're-run the assertion after recovering.',
           input_schema: {
             type: 'object',
             properties: {
@@ -145,7 +147,9 @@ module SimulatorLLMPilot
                        'return a one-line result including the element\'s type, label, value, and ' \
                        'enabled state. Use this after an action that triggers a transition when you ' \
                        'know an identifier or label expected on the destination screen — it replaces ' \
-                       'the wait + get_accessibility_tree pattern in a single, much cheaper call.',
+                       'the wait + get_accessibility_tree pattern in a single, much cheaper call. Also ' \
+                       'the right tool for exploratory probes ("is X here?") with a short timeout — ' \
+                       'unlike the assert tools, a timeout here is not enforced as a test failure.',
           input_schema: {
             type: 'object',
             properties: {
