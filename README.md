@@ -161,10 +161,10 @@ When you pass a directory, the runner executes every `.md` file in that director
 --debug                  Enable debug logging
 ```
 
-The `cleanup-delete-only` policy keeps posts, pages, categories, and tags
-read-only during setup and verification. Cleanup may read or delete those
-resources. Requests that violate the policy are rejected before they reach the
-network.
+The `cleanup-delete-only` policy allows only GET requests during setup and
+verification, and GET or DELETE requests during cleanup. It applies to every
+REST path, including batch endpoints. Requests that violate the policy are
+rejected before they reach the network.
 
 Run `simulator-llm-pilot run --help` for the CLI help text.
 
