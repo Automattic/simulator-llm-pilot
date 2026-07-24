@@ -17,6 +17,7 @@ class ConfigTest < Minitest::Test
       assert_equal 'ian', config.username
       assert_equal 'secret', config.app_password
       assert_equal '/wp-json/', config.rest_api_allowed_prefix
+      assert_nil config.rest_api_policy
       assert_equal 20, config.max_context_turns
     end
   end
@@ -71,5 +72,21 @@ class ConfigTest < Minitest::Test
     error = assert_raises(ArgumentError) { config.validate! }
 
     assert_includes error.message, '--compress-context-over must be a positive integer'
+  end
+
+  def test_validate_accepts_the_cleanup_delete_only_rest_api_policy
+    config = build_config
+    config.rest_api_policy = 'cleanup-delete-only'
+
+    config.validate!
+  end
+
+  def test_validate_rejects_an_unknown_rest_api_policy
+    config = build_config
+    config.rest_api_policy = 'allow-everything'
+
+    error = assert_raises(ArgumentError) { config.validate! }
+
+    assert_includes error.message, '--rest-api-policy must be one of: cleanup-delete-only'
   end
 end

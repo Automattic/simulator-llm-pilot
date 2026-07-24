@@ -477,6 +477,52 @@ class ToolExecutorTest < Minitest::Test
     end
   end
 
+  def test_cleanup_delete_only_policy_allows_expected_requests
+    @config.rest_api_policy = 'cleanup-delete-only'
+    response = fake_response(code: 200, body: '{}')
+    http = FakeHTTPTransport.new(response: response)
+    requests = [
+      { 'purpose' => 'setup', 'method' => 'GET', 'path' => '/wp-json/wp/v2/categories' },
+      { 'purpose' => 'verification', 'method' => 'GET', 'path' => '/wp-json/wp/v2/posts?search=title' },
+      { 'purpose' => 'cleanup', 'method' => 'GET', 'path' => '/wp-json/wp/v2/tags' },
+      { 'purpose' => 'cleanup', 'method' => 'DELETE', 'path' => '/wp-json/wp/v2/pages/123' }
+    ]
+
+    Net::HTTP.stub(:start, proc { |*_args, **_kwargs, &block| block.call(http) }) do
+      requests.each do |input|
+        assert_includes @executor.execute('rest_api_call', input), 'HTTP 200'
+      end
+    end
+
+    assert_equal 4, http.requests.length
+  end
+
+  def test_cleanup_delete_only_policy_blocks_mutations_before_the_request
+    @config.rest_api_policy = 'cleanup-delete-only'
+    forbidden_requests = [
+      { 'purpose' => 'setup', 'method' => 'POST', 'path' => '/wp-json/wp/v2/posts' },
+      { 'purpose' => 'setup', 'method' => 'DELETE', 'path' => '/wp-json/wp/v2/categories/12' },
+      { 'purpose' => 'verification', 'method' => 'PUT', 'path' => '/wp-json/wp/v2/pages/456' },
+      { 'purpose' => 'verification', 'method' => 'DELETE', 'path' => '/wp-json/wp/v2/tags/7' },
+      { 'purpose' => 'cleanup', 'method' => 'POST', 'path' => '/wp-json/wp/v2/posts' },
+      { 'purpose' => 'cleanup', 'method' => 'PUT', 'path' => '/wp-json/wp/v2/pages/456' },
+      { 'purpose' => 'setup', 'method' => 'POST', 'path' => '/wp-json/wp/v2/media' },
+      { 'purpose' => 'verification', 'method' => 'POST', 'path' => '/wp-json/batch/v1' },
+      { 'purpose' => 'verification', 'method' => 'POST', 'path' => '/wp-json/%62atch/v1' }
+    ]
+    transport_called = false
+
+    Net::HTTP.stub(:start, proc { transport_called = true }) do
+      forbidden_requests.each do |input|
+        result = @executor.execute('rest_api_call', input)
+
+        assert_match(/\AError: REST API policy 'cleanup-delete-only'/, result)
+      end
+    end
+
+    refute transport_called
+  end
+
   def test_infra_errors_increment_and_reset_consecutive_count
     @wda.tree = nil
 

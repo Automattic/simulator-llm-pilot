@@ -2,6 +2,8 @@
 
 module SimulatorLLMPilot
   class Config
+    REST_API_POLICIES = %w[cleanup-delete-only].freeze
+
     attr_accessor :app_bundle_id, :app_name, :site_url, :username, :app_password,
                   :simulator_udid, :simulator_name,
                   :wda_port, :wda_project_path,
@@ -10,7 +12,7 @@ module SimulatorLLMPilot
                   :max_turns_per_test, :test_timeout,
                   :max_context_turns, :compress_context_when_chars_exceed,
                   :max_screenshots_per_test,
-                  :rest_api_allowed_prefix, :app_instructions
+                  :rest_api_allowed_prefix, :rest_api_policy, :app_instructions
 
     def initialize
       @wda_port = 8100
@@ -28,6 +30,7 @@ module SimulatorLLMPilot
       @compress_context_when_chars_exceed = 2_500_000
       @max_screenshots_per_test = 5
       @rest_api_allowed_prefix = '/wp-json/' # only allow WP REST API paths
+      @rest_api_policy = nil
       @app_instructions = nil # caller-provided app-specific instructions (login flow, etc.)
       @app_name = nil # optional display name for the app (defaults to bundle ID)
       @anthropic_api_key = ENV.fetch('ANTHROPIC_API_KEY', nil)
@@ -55,6 +58,7 @@ module SimulatorLLMPilot
       errors << '--compress-context-over must be a positive integer (or 0 to disable)' unless valid_compression_threshold?
       errors.concat(site_url_errors)
       errors.concat(rest_api_prefix_errors)
+      errors.concat(rest_api_policy_errors)
 
       raise ArgumentError, "Configuration errors:\n  #{errors.join("\n  ")}" unless errors.empty?
     end
@@ -92,6 +96,12 @@ module SimulatorLLMPilot
       errors << '--rest-api-prefix must start with /' unless @rest_api_allowed_prefix.start_with?('/')
       errors << '--rest-api-prefix must not contain ..' if @rest_api_allowed_prefix.include?('..')
       errors
+    end
+
+    def rest_api_policy_errors
+      return [] if @rest_api_policy.nil? || REST_API_POLICIES.include?(@rest_api_policy)
+
+      ["--rest-api-policy must be one of: #{REST_API_POLICIES.join(', ')}"]
     end
 
     def normalized_site_url(value)

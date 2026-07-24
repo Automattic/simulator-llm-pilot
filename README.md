@@ -157,8 +157,14 @@ When you pass a directory, the runner executes every `.md` file in that director
 --timeout SECS           Timeout per test in seconds (default: 600)
 --max-context-turns N    Compress accessibility trees older than N turns (default: 20)
 --rest-api-prefix PATH   Allowed REST API path prefix (default: /wp-json/)
+--rest-api-policy POLICY REST mutation policy (supported: cleanup-delete-only)
 --debug                  Enable debug logging
 ```
+
+The `cleanup-delete-only` policy allows only GET requests during setup and
+verification, and GET or DELETE requests during cleanup. It applies to every
+REST path, including batch endpoints. Requests that violate the policy are
+rejected before they reach the network.
 
 Run `simulator-llm-pilot run --help` for the CLI help text.
 

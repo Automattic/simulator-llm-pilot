@@ -113,6 +113,11 @@ module SimulatorLLMPilot
           @config.rest_api_allowed_prefix = v
         end
 
+        opts.on('--rest-api-policy POLICY',
+                'REST mutation policy (supported: cleanup-delete-only)') do |v|
+          @config.rest_api_policy = v
+        end
+
         opts.on('--app-name NAME', 'Display name for the app (defaults to bundle ID)') do |v|
           @config.app_name = v
         end
