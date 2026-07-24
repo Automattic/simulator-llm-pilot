@@ -12,9 +12,9 @@ module SimulatorLLMPilot
     MAX_TAP_REPEATS = 30
     REPEAT_TAP_INTERVAL_SECONDS = 0.2
     CLEANUP_DELETE_ONLY_METHODS = {
-      'setup' => %w[GET],
-      'verification' => %w[GET],
-      'cleanup' => %w[GET DELETE]
+      'setup' => %w[GET].freeze,
+      'verification' => %w[GET].freeze,
+      'cleanup' => %w[GET DELETE].freeze
     }.freeze
     # Attributes summarized on found elements so assert/wait results answer
     # "what state is it in", not just "is it there".
