@@ -78,6 +78,12 @@ class CLITest < Minitest::Test
     assert_nil config.compress_context_when_chars_exceed
   end
 
+  def test_run_parses_the_rest_api_policy_flag
+    config = run_cli_and_capture_config('--rest-api-policy', 'cleanup-delete-only')
+
+    assert_equal 'cleanup-delete-only', config.rest_api_policy
+  end
+
   private
 
   def run_cli_and_capture_config(*extra_args)

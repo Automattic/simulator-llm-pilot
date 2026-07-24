@@ -11,6 +11,12 @@ module SimulatorLLMPilot
     POLL_INTERVAL_SECONDS = 0.3
     MAX_TAP_REPEATS = 30
     REPEAT_TAP_INTERVAL_SECONDS = 0.2
+    REST_CONTENT_RESOURCES = %w[posts pages categories tags].freeze
+    CLEANUP_DELETE_ONLY_METHODS = {
+      'setup' => %w[GET],
+      'verification' => %w[GET],
+      'cleanup' => %w[GET DELETE]
+    }.freeze
     # Attributes summarized on found elements so assert/wait results answer
     # "what state is it in", not just "is it there".
     ELEMENT_STATE_ATTRIBUTES = %w[type label value enabled].freeze
@@ -486,6 +492,7 @@ module SimulatorLLMPilot
 
       validate_rest_api_purpose!(purpose)
       validate_rest_api_path!(path)
+      validate_rest_api_policy!(purpose, method, path)
 
       uri = URI("#{@config.site_url}#{path}")
       if query
@@ -558,6 +565,25 @@ module SimulatorLLMPilot
 
       raise "REST API path '#{path}' is not allowed. " \
             "Only paths starting with '#{allowed}' are permitted."
+    end
+
+    def validate_rest_api_policy!(purpose, method, path)
+      return unless @config.rest_api_policy == 'cleanup-delete-only'
+      return unless protected_rest_content_path?(path)
+
+      allowed_methods = CLEANUP_DELETE_ONLY_METHODS.fetch(purpose)
+      return if allowed_methods.include?(method)
+
+      raise "REST API policy 'cleanup-delete-only' does not allow #{purpose} #{method} " \
+            "requests to '#{path}'. Allowed methods for #{purpose}: #{allowed_methods.join(', ')}."
+    end
+
+    def protected_rest_content_path?(path)
+      decoded_path = CGI.unescape(path.to_s.split('?', 2).first)
+      normalized_path = File.expand_path(decoded_path, '/')
+      resource_pattern = REST_CONTENT_RESOURCES.join('|')
+
+      normalized_path.match?(%r{\A/wp-json/wp/v2/(?:#{resource_pattern})(?:/|\z)})
     end
 
     def build_http_request(method, uri)
