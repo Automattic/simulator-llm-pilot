@@ -114,7 +114,7 @@ module SimulatorLLMPilot
         end
 
         opts.on('--rest-api-policy POLICY',
-                'REST mutation policy (supported: cleanup-delete-only)') do |v|
+                'REST mutation policy (supported: verification-readonly)') do |v|
           @config.rest_api_policy = v
         end
 
