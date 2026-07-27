@@ -10,10 +10,10 @@ _None_
 
 ### New Features
 
-- Add a `--rest-api-policy cleanup-delete-only` option that blocks REST content
-  mutations before they reach the network. Setup and verification may only use
-  GET; cleanup may use GET or DELETE. The policy applies to every REST path,
-  including batch endpoints.
+- Add a `--rest-api-policy verification-readonly` option that permits fixture
+  mutations during setup, limits verification to GET, and limits cleanup to GET
+  or DELETE. REST phases must run in order and cannot move backward. The policy
+  applies to every REST path, including batch endpoints.
 - Cache the system prompt, tool schemas, and conversation prefix on every
   Anthropic request (`cache_control`), so the agent loop re-reads prior turns at
   the cache rate instead of re-billing them at full price each turn. This is the

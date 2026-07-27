@@ -477,12 +477,15 @@ class ToolExecutorTest < Minitest::Test
     end
   end
 
-  def test_cleanup_delete_only_policy_allows_expected_requests
-    @config.rest_api_policy = 'cleanup-delete-only'
+  def test_verification_readonly_policy_allows_ordered_requests
+    @config.rest_api_policy = 'verification-readonly'
     response = fake_response(code: 200, body: '{}')
     http = FakeHTTPTransport.new(response: response)
     requests = [
       { 'purpose' => 'setup', 'method' => 'GET', 'path' => '/wp-json/wp/v2/categories' },
+      { 'purpose' => 'setup', 'method' => 'POST', 'path' => '/wp-json/wp/v2/categories' },
+      { 'purpose' => 'setup', 'method' => 'PUT', 'path' => '/wp-json/wp/v2/categories/12' },
+      { 'purpose' => 'setup', 'method' => 'DELETE', 'path' => '/wp-json/wp/v2/categories/12' },
       { 'purpose' => 'verification', 'method' => 'GET', 'path' => '/wp-json/wp/v2/posts?search=title' },
       { 'purpose' => 'cleanup', 'method' => 'GET', 'path' => '/wp-json/wp/v2/tags' },
       { 'purpose' => 'cleanup', 'method' => 'DELETE', 'path' => '/wp-json/wp/v2/pages/123' }
@@ -494,21 +497,19 @@ class ToolExecutorTest < Minitest::Test
       end
     end
 
-    assert_equal 4, http.requests.length
+    assert_equal 7, http.requests.length
   end
 
-  def test_cleanup_delete_only_policy_blocks_mutations_before_the_request
-    @config.rest_api_policy = 'cleanup-delete-only'
+  def test_verification_readonly_policy_blocks_late_phase_mutations_before_the_request
+    @config.rest_api_policy = 'verification-readonly'
     forbidden_requests = [
-      { 'purpose' => 'setup', 'method' => 'POST', 'path' => '/wp-json/wp/v2/posts' },
-      { 'purpose' => 'setup', 'method' => 'DELETE', 'path' => '/wp-json/wp/v2/categories/12' },
+      { 'purpose' => 'verification', 'method' => 'POST', 'path' => '/wp-json/wp/v2/posts' },
       { 'purpose' => 'verification', 'method' => 'PUT', 'path' => '/wp-json/wp/v2/pages/456' },
       { 'purpose' => 'verification', 'method' => 'DELETE', 'path' => '/wp-json/wp/v2/tags/7' },
-      { 'purpose' => 'cleanup', 'method' => 'POST', 'path' => '/wp-json/wp/v2/posts' },
-      { 'purpose' => 'cleanup', 'method' => 'PUT', 'path' => '/wp-json/wp/v2/pages/456' },
-      { 'purpose' => 'setup', 'method' => 'POST', 'path' => '/wp-json/wp/v2/media' },
       { 'purpose' => 'verification', 'method' => 'POST', 'path' => '/wp-json/batch/v1' },
-      { 'purpose' => 'verification', 'method' => 'POST', 'path' => '/wp-json/%62atch/v1' }
+      { 'purpose' => 'verification', 'method' => 'POST', 'path' => '/wp-json/%62atch/v1' },
+      { 'purpose' => 'cleanup', 'method' => 'POST', 'path' => '/wp-json/wp/v2/posts' },
+      { 'purpose' => 'cleanup', 'method' => 'PUT', 'path' => '/wp-json/wp/v2/pages/456' }
     ]
     transport_called = false
 
@@ -516,8 +517,59 @@ class ToolExecutorTest < Minitest::Test
       forbidden_requests.each do |input|
         result = @executor.execute('rest_api_call', input)
 
-        assert_match(/\AError: REST API policy 'cleanup-delete-only'/, result)
+        assert_match(/\AError: REST API policy 'verification-readonly'/, result)
       end
+    end
+
+    refute transport_called
+  end
+
+  def test_verification_readonly_policy_rejects_returning_to_setup_after_verification
+    @config.rest_api_policy = 'verification-readonly'
+    response = fake_response(code: 200, body: '{}')
+    http = FakeHTTPTransport.new(response: response)
+
+    Net::HTTP.stub(:start, proc { |*_args, **_kwargs, &block| block.call(http) }) do
+      result = @executor.execute('rest_api_call', {
+                                   'purpose' => 'verification',
+                                   'method' => 'GET',
+                                   'path' => '/wp-json/wp/v2/posts'
+                                 })
+
+      assert_includes result, 'HTTP 200'
+
+      result = @executor.execute('rest_api_call', {
+                                   'purpose' => 'setup',
+                                   'method' => 'POST',
+                                   'path' => '/wp-json/wp/v2/posts'
+                                 })
+
+      assert_match(/\AError:.*does not allow returning to setup after verification has started/, result)
+    end
+
+    assert_equal 1, http.requests.length
+  end
+
+  def test_verification_readonly_policy_does_not_allow_fallback_after_a_blocked_mutation
+    @config.rest_api_policy = 'verification-readonly'
+    transport_called = false
+
+    Net::HTTP.stub(:start, proc { transport_called = true }) do
+      result = @executor.execute('rest_api_call', {
+                                   'purpose' => 'verification',
+                                   'method' => 'POST',
+                                   'path' => '/wp-json/wp/v2/posts'
+                                 })
+
+      assert_match(/\AError:.*does not allow verification POST/, result)
+
+      result = @executor.execute('rest_api_call', {
+                                   'purpose' => 'setup',
+                                   'method' => 'POST',
+                                   'path' => '/wp-json/wp/v2/posts'
+                                 })
+
+      assert_match(/\AError:.*does not allow returning to setup after verification has started/, result)
     end
 
     refute transport_called

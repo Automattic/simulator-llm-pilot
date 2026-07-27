@@ -79,9 +79,9 @@ class CLITest < Minitest::Test
   end
 
   def test_run_parses_the_rest_api_policy_flag
-    config = run_cli_and_capture_config('--rest-api-policy', 'cleanup-delete-only')
+    config = run_cli_and_capture_config('--rest-api-policy', 'verification-readonly')
 
-    assert_equal 'cleanup-delete-only', config.rest_api_policy
+    assert_equal 'verification-readonly', config.rest_api_policy
   end
 
   private

@@ -11,10 +11,15 @@ module SimulatorLLMPilot
     POLL_INTERVAL_SECONDS = 0.3
     MAX_TAP_REPEATS = 30
     REPEAT_TAP_INTERVAL_SECONDS = 0.2
-    CLEANUP_DELETE_ONLY_METHODS = {
-      'setup' => %w[GET].freeze,
+    VERIFICATION_READONLY_METHODS = {
+      'setup' => %w[GET POST PUT DELETE].freeze,
       'verification' => %w[GET].freeze,
       'cleanup' => %w[GET DELETE].freeze
+    }.freeze
+    REST_API_PHASE_ORDER = {
+      'setup' => 0,
+      'verification' => 1,
+      'cleanup' => 2
     }.freeze
     # Attributes summarized on found elements so assert/wait results answer
     # "what state is it in", not just "is it there".
@@ -43,6 +48,7 @@ module SimulatorLLMPilot
       @total_infra_errors = 0
       @consecutive_infra_errors = 0
       @tool_usage = Hash.new(0)
+      @rest_api_policy_phase = nil
       @rest_api_usage = Hash.new do |hash, purpose|
         hash[purpose] = {
           calls: 0,
@@ -567,12 +573,23 @@ module SimulatorLLMPilot
     end
 
     def validate_rest_api_policy!(purpose, method, path)
-      return unless @config.rest_api_policy == 'cleanup-delete-only'
+      return unless @config.rest_api_policy == 'verification-readonly'
 
-      allowed_methods = CLEANUP_DELETE_ONLY_METHODS.fetch(purpose)
+      requested_phase = REST_API_PHASE_ORDER.fetch(purpose)
+      if @rest_api_policy_phase && requested_phase < @rest_api_policy_phase
+        current_phase = REST_API_PHASE_ORDER.key(@rest_api_policy_phase)
+        raise "REST API policy 'verification-readonly' does not allow returning to #{purpose} " \
+              "after #{current_phase} has started."
+      end
+
+      # Enter the phase before checking its method so a rejected verification
+      # mutation cannot fall back to setup and retry the same mutation.
+      @rest_api_policy_phase = requested_phase
+
+      allowed_methods = VERIFICATION_READONLY_METHODS.fetch(purpose)
       return if allowed_methods.include?(method)
 
-      raise "REST API policy 'cleanup-delete-only' does not allow #{purpose} #{method} " \
+      raise "REST API policy 'verification-readonly' does not allow #{purpose} #{method} " \
             "requests to '#{path}'. Allowed methods for #{purpose}: #{allowed_methods.join(', ')}."
     end
 

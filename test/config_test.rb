@@ -74,9 +74,9 @@ class ConfigTest < Minitest::Test
     assert_includes error.message, '--compress-context-over must be a positive integer'
   end
 
-  def test_validate_accepts_the_cleanup_delete_only_rest_api_policy
+  def test_validate_accepts_the_verification_readonly_rest_api_policy
     config = build_config
-    config.rest_api_policy = 'cleanup-delete-only'
+    config.rest_api_policy = 'verification-readonly'
 
     config.validate!
   end
@@ -87,6 +87,6 @@ class ConfigTest < Minitest::Test
 
     error = assert_raises(ArgumentError) { config.validate! }
 
-    assert_includes error.message, '--rest-api-policy must be one of: cleanup-delete-only'
+    assert_includes error.message, '--rest-api-policy must be one of: verification-readonly'
   end
 end

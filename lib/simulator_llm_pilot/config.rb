@@ -2,7 +2,7 @@
 
 module SimulatorLLMPilot
   class Config
-    REST_API_POLICIES = %w[cleanup-delete-only].freeze
+    REST_API_POLICIES = %w[verification-readonly].freeze
 
     attr_accessor :app_bundle_id, :app_name, :site_url, :username, :app_password,
                   :simulator_udid, :simulator_name,
