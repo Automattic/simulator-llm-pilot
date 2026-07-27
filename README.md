@@ -167,6 +167,10 @@ during cleanup. The phases must run in that order and cannot move backward. The
 policy applies to every REST path, including batch endpoints. Requests that
 violate the policy are rejected before they reach the network.
 
+The policy enforces the purpose declared on each REST call; it does not infer
+the semantic phase from simulator state. Test instructions remain responsible
+for defining which setup work is legitimate.
+
 Run `simulator-llm-pilot run --help` for the CLI help text.
 
 ### Environment variables

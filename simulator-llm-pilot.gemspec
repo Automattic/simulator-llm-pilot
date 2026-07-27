@@ -22,6 +22,8 @@ Gem::Specification.new do |spec|
   spec.executables = ['simulator-llm-pilot']
   spec.require_paths = ['lib']
 
+  spec.add_dependency 'base64', '~> 0.2'
+
   spec.add_development_dependency 'minitest', '~> 5.0'
   spec.add_development_dependency 'rubocop-minitest'
   spec.add_development_dependency 'rubocop-rake'
