@@ -74,6 +74,28 @@ class TranscriptWriterTest < Minitest::Test
     refute_path_exists File.join(@dir, 'transcripts')
   end
 
+  def test_host_and_username_redaction_is_case_insensitive
+    @config.transcript_policy = 'failures'
+    transcript = {
+      system: 'Open HTTPS://EXAMPLE.TEST as IAN',
+      tools: [],
+      messages: []
+    }
+
+    path = writer.write(
+      test_case: @test_case,
+      result: failure_result,
+      transcript: transcript,
+      index: 0
+    )
+    serialized = Zlib::GzipReader.open(path, &:read)
+
+    refute_includes serialized, 'EXAMPLE.TEST'
+    refute_match(/(?<![[:alnum:]_.-])IAN(?![[:alnum:]_.-])/, serialized)
+    assert_includes serialized, '[REDACTED:SITE_HOST]'
+    assert_includes serialized, '[REDACTED:USERNAME]'
+  end
+
   def test_all_policy_writes_passing_transcripts
     @config.transcript_policy = 'all'
 

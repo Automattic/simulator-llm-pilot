@@ -16,6 +16,7 @@ class RunnerTest < Minitest::Test
   end
 
   def test_run_writes_results_for_a_passing_test
+    @config.transcript_policy = 'failures'
     simulator = FakeSimulator.new
     lifecycle = FakeLifecycle.new
     wda = FakeWDA.new
@@ -54,6 +55,7 @@ class RunnerTest < Minitest::Test
               assert_equal(1, wda.calls.count { |call| call.first == :create_session })
               assert_path_exists File.join(@config.results_dir, 'results.md')
               assert_includes File.read(File.join(@config.results_dir, 'results.md')), 'Verification: passed'
+              refute_path_exists File.join(@config.results_dir, 'transcripts')
               assert_equal [:stop], lifecycle.calls.last
             end
           end

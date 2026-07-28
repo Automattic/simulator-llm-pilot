@@ -57,8 +57,8 @@ module SimulatorLLMPilot
 
         usage_before = usage_snapshot(llm)
         result = prepare_session!(wda, test_case)
-        transcript = nil
-        result, transcript = run_test_case(test_case, wda, llm) if result.nil?
+        agent = nil
+        result, agent = run_test_case(test_case, wda, llm) if result.nil?
         result[:usage] = usage_delta(usage_before, usage_snapshot(llm))
         result[:test] = test_case.title
         result[:file] = test_case.file_path
@@ -66,9 +66,8 @@ module SimulatorLLMPilot
         @transcript_writer.write(
           test_case: test_case,
           result: result,
-          transcript: transcript,
           index: index
-        )
+        ) { agent&.transcript }
         log_result(result)
         result
       end
@@ -105,9 +104,7 @@ module SimulatorLLMPilot
         llm: llm,
         logger: @logger
       )
-      result = agent.run
-      transcript = agent.transcript unless @config.transcript_policy == 'none'
-      [result, transcript]
+      [agent.run, agent]
     end
 
     def reset_app_state!

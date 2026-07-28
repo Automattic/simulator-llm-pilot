@@ -12,8 +12,10 @@ module SimulatorLLMPilot
       @logger = logger
     end
 
-    def write(test_case:, result:, transcript:, index:)
+    def write(test_case:, result:, index:, transcript: nil)
       return unless should_write?(result)
+
+      transcript ||= yield if block_given?
       return if transcript.nil?
 
       directory = File.join(@config.results_dir, 'transcripts')
@@ -82,22 +84,27 @@ module SimulatorLLMPilot
 
     def redactions
       @redactions ||= begin
-        pairs = [
+        exact_pairs = [
           [@config.anthropic_api_key, '[REDACTED:ANTHROPIC_API_KEY]'],
           [@config.app_password, '[REDACTED:APP_PASSWORD]'],
           [basic_auth_value, '[REDACTED:BASIC_AUTH]'],
-          [@config.site_url, '[REDACTED:SITE_URL]'],
-          [site_host, '[REDACTED:SITE_HOST]']
+          [@config.site_url, '[REDACTED:SITE_URL]']
         ]
-        patterns = pairs.reject { |sensitive, _replacement| sensitive.nil? || sensitive.empty? }
-                        .uniq { |sensitive, _replacement| sensitive }
-                        .sort_by { |sensitive, _replacement| -sensitive.length }
-                        .map { |sensitive, replacement| [Regexp.new(Regexp.escape(sensitive)), replacement] }
+        patterns = exact_pairs.reject { |sensitive, _replacement| sensitive.nil? || sensitive.empty? }
+                              .uniq { |sensitive, _replacement| sensitive }
+                              .sort_by { |sensitive, _replacement| -sensitive.length }
+                              .map { |sensitive, replacement| [Regexp.new(Regexp.escape(sensitive)), replacement] }
+
+        host = site_host
+        patterns << [Regexp.new(Regexp.escape(host), Regexp::IGNORECASE), '[REDACTED:SITE_HOST]'] unless host.empty?
 
         username = @config.username.to_s
         unless username.empty?
           escaped = Regexp.escape(username)
-          patterns << [Regexp.new("(?<![[:alnum:]_.-])#{escaped}(?![[:alnum:]_.-])"), '[REDACTED:USERNAME]']
+          patterns << [
+            Regexp.new("(?<![[:alnum:]_.-])#{escaped}(?![[:alnum:]_.-])", Regexp::IGNORECASE),
+            '[REDACTED:USERNAME]'
+          ]
         end
         patterns
       end
