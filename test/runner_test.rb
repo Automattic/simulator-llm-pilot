@@ -16,6 +16,7 @@ class RunnerTest < Minitest::Test
   end
 
   def test_run_writes_results_for_a_passing_test
+    @config.transcript_policy = 'failures'
     simulator = FakeSimulator.new
     lifecycle = FakeLifecycle.new
     wda = FakeWDA.new
@@ -54,6 +55,7 @@ class RunnerTest < Minitest::Test
               assert_equal(1, wda.calls.count { |call| call.first == :create_session })
               assert_path_exists File.join(@config.results_dir, 'results.md')
               assert_includes File.read(File.join(@config.results_dir, 'results.md')), 'Verification: passed'
+              refute_path_exists File.join(@config.results_dir, 'transcripts')
               assert_equal [:stop], lifecycle.calls.last
             end
           end
@@ -80,6 +82,68 @@ class RunnerTest < Minitest::Test
         end
       end
     end
+  end
+
+  def test_run_writes_a_transcript_for_a_failed_test
+    simulator = FakeSimulator.new
+    lifecycle = FakeLifecycle.new
+    wda = FakeWDA.new
+    llm = Object.new
+    agent = Struct.new(:result, :conversation) do
+      def run
+        result
+      end
+
+      def transcript
+        conversation
+      end
+    end.new(
+      {
+        status: 'fail',
+        reason: 'missing element',
+        model_status: 'pass',
+        model_reason: 'done',
+        enforced_failures: ['missing element'],
+        tool_usage: { 'assert_element_exists' => 1, 'complete_test' => 1 },
+        verification_expected: true,
+        verification_ran: true,
+        verification_satisfied: true,
+        cleanup_expected: true,
+        cleanup_ran: true,
+        cleanup_satisfied: true,
+        turns: 4,
+        total_infra_errors: 0
+      },
+      {
+        system: 'system',
+        tools: [],
+        messages: [{ role: 'user', content: 'https://example.test ian secret anthropic-key' }]
+      }
+    )
+    @config.transcript_policy = 'failures'
+
+    SimulatorLLMPilot::Simulator.stub(:new, simulator) do
+      SimulatorLLMPilot::WDALifecycle.stub(:new, lifecycle) do
+        SimulatorLLMPilot::WDAClient.stub(:new, wda) do
+          SimulatorLLMPilot::LLMClient.stub(:new, llm) do
+            SimulatorLLMPilot::Agent.stub(:new, agent) do
+              SimulatorLLMPilot::Runner.new(config: @config, logger: @logger).run(@test_path)
+            end
+          end
+        end
+      end
+    end
+
+    path = File.join(@config.results_dir, 'transcripts', '01-publish-post.json.gz')
+
+    assert_path_exists path
+
+    contents = Zlib::GzipReader.open(path, &:read)
+
+    assert_includes contents, '[REDACTED:SITE_URL]'
+    assert_includes contents, '[REDACTED:USERNAME]'
+    assert_includes contents, '[REDACTED:APP_PASSWORD]'
+    assert_includes contents, '[REDACTED:ANTHROPIC_API_KEY]'
   end
 
   def test_resolve_simulator_prefers_requested_name_over_other_booted_device

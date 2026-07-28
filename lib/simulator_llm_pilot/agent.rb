@@ -46,6 +46,10 @@ module SimulatorLLMPilot
       3. type + context (e.g., "Button inside NavigationBar")
       4. partial label match (for dynamic labels like "3 Posts")
 
+      Only use identifiers or labels that appear in the test case, app-specific
+      instructions, or an accessibility tree returned during this test. Never invent
+      an accessibility identifier from an implementation class or view-controller name.
+
       ## Scrolling
 
       For vertical scrolling, always use x = screen_width - 30 to avoid accidentally
@@ -211,6 +215,14 @@ module SimulatorLLMPilot
     rescue LLMError => e
       @logger.error e.message
       build_result('infra_error', e.message)
+    end
+
+    def transcript
+      {
+        system: full_system_prompt,
+        tools: ToolDefinitions.all,
+        messages: @messages
+      }
     end
 
     private

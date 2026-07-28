@@ -8,7 +8,8 @@ class ConfigTest < Minitest::Test
       'ANTHROPIC_API_KEY' => 'key-123',
       'SIMULATOR_LLM_PILOT_SITE_URL' => 'https://wp.test',
       'SIMULATOR_LLM_PILOT_USERNAME' => 'ian',
-      'SIMULATOR_LLM_PILOT_APP_PASSWORD' => 'secret'
+      'SIMULATOR_LLM_PILOT_APP_PASSWORD' => 'secret',
+      'SIMULATOR_LLM_PILOT_TRANSCRIPT_POLICY' => 'failures'
     ) do
       config = SimulatorLLMPilot::Config.new
 
@@ -19,6 +20,7 @@ class ConfigTest < Minitest::Test
       assert_equal '/wp-json/', config.rest_api_allowed_prefix
       assert_nil config.rest_api_policy
       assert_equal 20, config.max_context_turns
+      assert_equal 'failures', config.transcript_policy
     end
   end
 
@@ -88,5 +90,14 @@ class ConfigTest < Minitest::Test
     error = assert_raises(ArgumentError) { config.validate! }
 
     assert_includes error.message, '--rest-api-policy must be one of: verification-readonly'
+  end
+
+  def test_validate_rejects_an_unknown_transcript_policy
+    config = build_config
+    config.transcript_policy = 'sometimes'
+
+    error = assert_raises(ArgumentError) { config.validate! }
+
+    assert_includes error.message, '--transcript-policy must be one of: none, failures, all'
   end
 end

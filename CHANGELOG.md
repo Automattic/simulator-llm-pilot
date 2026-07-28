@@ -10,6 +10,10 @@ _None_
 
 ### New Features
 
+- Add `--transcript-policy none|failures|all` (and the matching
+  `SIMULATOR_LLM_PILOT_TRANSCRIPT_POLICY` environment variable) to save one
+  gzip-compressed JSON conversation per selected test. Known credentials and
+  site identity are recursively redacted before the transcript is written.
 - Add a `--rest-api-policy verification-readonly` option that permits fixture
   mutations during setup, limits verification to GET, and limits cleanup to GET
   or DELETE. REST phases must run in order and cannot move backward. The policy
@@ -47,6 +51,9 @@ _None_
 
 ### Bug Fixes
 
+- Tell the agent never to invent accessibility identifiers from implementation
+  class or view-controller names; asserted identifiers and labels must come from
+  the test, app instructions, or an accessibility tree observed during the test.
 - Enforce `assert_element_exists` / `assert_element_absent` at the runner level:
   if a target's most recent assertion is still failing when the test completes,
   a `pass` result is downgraded to `fail` (mirroring the REST verification

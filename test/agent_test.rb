@@ -127,6 +127,30 @@ class AgentTest < Minitest::Test
     end
   end
 
+  def test_transcript_captures_the_prompt_tools_and_conversation
+    llm = FakeLLM.new(responses: [
+                        { 'content' => [tool_use(name: 'complete_test',
+                                                 input: { 'status' => 'fail', 'reason' => 'not found' })] }
+                      ])
+    agent = SimulatorLLMPilot::Agent.new(
+      test_case: @test_case,
+      config: @config,
+      wda: FakeWDA.new,
+      simulator: FakeSimulator.new,
+      llm: llm,
+      logger: @logger
+    )
+
+    agent.run
+    transcript = agent.transcript
+
+    assert_includes transcript[:system], 'Never invent'
+    assert_includes transcript[:tools].map { |tool| tool[:name] }, 'assert_element_exists'
+    assert_equal 'user', transcript[:messages].first[:role]
+    assert_includes transcript[:messages].map { |message| message[:role] }, 'assistant'
+    assert_equal 'user', transcript[:messages].last[:role]
+  end
+
   def test_aborts_after_three_consecutive_infra_errors
     llm = FakeLLM.new(responses: [
                         { 'content' => [tool_use(name: 'get_accessibility_tree', input: {}, id: '1')] },

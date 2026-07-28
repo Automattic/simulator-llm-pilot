@@ -84,6 +84,12 @@ class CLITest < Minitest::Test
     assert_equal 'verification-readonly', config.rest_api_policy
   end
 
+  def test_run_parses_the_transcript_policy_flag
+    config = run_cli_and_capture_config('--transcript-policy', 'failures')
+
+    assert_equal 'failures', config.transcript_policy
+  end
+
   private
 
   def run_cli_and_capture_config(*extra_args)
