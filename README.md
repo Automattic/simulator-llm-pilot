@@ -152,6 +152,7 @@ When you pass a directory, the runner executes every `.md` file in that director
 --wda-port PORT          WDA port (default: 8100)
 --wda-project PATH       Path to WebDriverAgent.xcodeproj
 --results-dir DIR        Output directory for results
+--transcript-policy MODE Write redacted compressed transcripts: none, failures, or all (default: none)
 --model MODEL            Anthropic model (default: claude-sonnet-4-6)
 --max-turns N            Max tool call rounds per test (default: 100)
 --timeout SECS           Timeout per test in seconds (default: 600)
@@ -181,6 +182,7 @@ Run `simulator-llm-pilot run --help` for the CLI help text.
 | `SIMULATOR_LLM_PILOT_SITE_URL` | No | WordPress site URL (alternative to `--site-url`) |
 | `SIMULATOR_LLM_PILOT_USERNAME` | No | WordPress username (alternative to `--username`) |
 | `SIMULATOR_LLM_PILOT_APP_PASSWORD` | No | WordPress app password (alternative to `--app-password`) |
+| `SIMULATOR_LLM_PILOT_TRANSCRIPT_POLICY` | No | Transcript policy: `none`, `failures`, or `all` (default: `none`) |
 
 ## WDA setup
 
@@ -208,11 +210,28 @@ Results are written to `results/<timestamp>/`:
 ```
 results/2026-03-23-1430/
 ├── results.md              # Summary with pass/fail for each test
-└── screenshots/            # Failure screenshots
-    └── create-blank-page-failure-1.png
+├── screenshots/            # Screenshots explicitly taken by the agent
+│   └── create-blank-page-failure-1.png
+└── transcripts/            # Present when transcript output is enabled
+    └── 01-create-blank-page.json.gz
 ```
 
 The process exits with status code `0` if all tests pass, or `1` if any test fails or hits an infrastructure error.
+
+### LLM transcripts
+
+Use `--transcript-policy failures` to save the final append-only conversation for
+failed tests without duplicating the cumulative message history sent on every API
+request. Use `all` to capture passing tests too. Each transcript contains the system
+prompt, tool definitions, assistant tool calls, and tool results, and is written once
+as gzip-compressed JSON.
+
+Before writing, the runner recursively replaces the configured Anthropic API key,
+WordPress application password, Basic authorization value, site URL/host, and
+username. Request headers and the raw configuration are never included. Transcripts
+can still contain sensitive or personal data visible in accessibility trees, generated
+content, assistant output, and REST response bodies. Store and retain them with the
+same care as screenshots or other authenticated test artifacts.
 
 ## Development
 

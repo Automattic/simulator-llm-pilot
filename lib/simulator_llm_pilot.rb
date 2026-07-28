@@ -20,6 +20,7 @@ require_relative 'simulator_llm_pilot/tool_definitions'
 require_relative 'simulator_llm_pilot/tool_executor'
 require_relative 'simulator_llm_pilot/llm_client'
 require_relative 'simulator_llm_pilot/agent'
+require_relative 'simulator_llm_pilot/transcript_writer'
 require_relative 'simulator_llm_pilot/runner'
 require_relative 'simulator_llm_pilot/cli'
 

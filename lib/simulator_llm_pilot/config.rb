@@ -3,6 +3,7 @@
 module SimulatorLLMPilot
   class Config
     REST_API_POLICIES = %w[verification-readonly].freeze
+    TRANSCRIPT_POLICIES = %w[none failures all].freeze
 
     attr_accessor :app_bundle_id, :app_name, :site_url, :username, :app_password,
                   :simulator_udid, :simulator_name,
@@ -12,7 +13,8 @@ module SimulatorLLMPilot
                   :max_turns_per_test, :test_timeout,
                   :max_context_turns, :compress_context_when_chars_exceed,
                   :max_screenshots_per_test,
-                  :rest_api_allowed_prefix, :rest_api_policy, :app_instructions
+                  :rest_api_allowed_prefix, :rest_api_policy, :app_instructions,
+                  :transcript_policy
 
     def initialize
       @wda_port = 8100
@@ -31,6 +33,7 @@ module SimulatorLLMPilot
       @max_screenshots_per_test = 5
       @rest_api_allowed_prefix = '/wp-json/' # only allow WP REST API paths
       @rest_api_policy = nil
+      @transcript_policy = ENV.fetch('SIMULATOR_LLM_PILOT_TRANSCRIPT_POLICY', 'none')
       @app_instructions = nil # caller-provided app-specific instructions (login flow, etc.)
       @app_name = nil # optional display name for the app (defaults to bundle ID)
       @anthropic_api_key = ENV.fetch('ANTHROPIC_API_KEY', nil)
@@ -59,6 +62,7 @@ module SimulatorLLMPilot
       errors.concat(site_url_errors)
       errors.concat(rest_api_prefix_errors)
       errors.concat(rest_api_policy_errors)
+      errors.concat(transcript_policy_errors)
 
       raise ArgumentError, "Configuration errors:\n  #{errors.join("\n  ")}" unless errors.empty?
     end
@@ -102,6 +106,12 @@ module SimulatorLLMPilot
       return [] if @rest_api_policy.nil? || REST_API_POLICIES.include?(@rest_api_policy)
 
       ["--rest-api-policy must be one of: #{REST_API_POLICIES.join(', ')}"]
+    end
+
+    def transcript_policy_errors
+      return [] if TRANSCRIPT_POLICIES.include?(@transcript_policy)
+
+      ["--transcript-policy must be one of: #{TRANSCRIPT_POLICIES.join(', ')}"]
     end
 
     def normalized_site_url(value)

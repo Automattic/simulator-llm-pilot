@@ -14,6 +14,7 @@ module SimulatorLLMPilot
       @logger = logger
       @simulator = Simulator.new(logger: logger)
       @wda_lifecycle = WDALifecycle.new(port: config.wda_port, logger: logger)
+      @transcript_writer = TranscriptWriter.new(config: config, logger: logger)
     end
 
     def run(test_path)
@@ -56,11 +57,18 @@ module SimulatorLLMPilot
 
         usage_before = usage_snapshot(llm)
         result = prepare_session!(wda, test_case)
-        result ||= run_test_case(test_case, wda, llm)
+        transcript = nil
+        result, transcript = run_test_case(test_case, wda, llm) if result.nil?
         result[:usage] = usage_delta(usage_before, usage_snapshot(llm))
         result[:test] = test_case.title
         result[:file] = test_case.file_path
 
+        @transcript_writer.write(
+          test_case: test_case,
+          result: result,
+          transcript: transcript,
+          index: index
+        )
         log_result(result)
         result
       end
@@ -89,14 +97,17 @@ module SimulatorLLMPilot
     end
 
     def run_test_case(test_case, wda, llm)
-      Agent.new(
+      agent = Agent.new(
         test_case: test_case,
         config: @config,
         wda: wda,
         simulator: @simulator,
         llm: llm,
         logger: @logger
-      ).run
+      )
+      result = agent.run
+      transcript = agent.transcript unless @config.transcript_policy == 'none'
+      [result, transcript]
     end
 
     def reset_app_state!

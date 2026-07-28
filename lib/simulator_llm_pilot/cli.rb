@@ -86,6 +86,11 @@ module SimulatorLLMPilot
           @config.results_dir = v
         end
 
+        opts.on('--transcript-policy POLICY',
+                'Write redacted compressed transcripts: none, failures, or all (default: none)') do |v|
+          @config.transcript_policy = v
+        end
+
         opts.on('--model MODEL', 'Anthropic model (default: claude-sonnet-4-6)') do |v|
           @config.anthropic_model = v
         end
